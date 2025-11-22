@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import FolderGrid from "@/components/FolderGrid";
 import FileUpload from "@/components/FileUpload";
+import FilePreviewDialog from "@/components/FilePreviewDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,7 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { FolderPlus, Search, Home } from "lucide-react";
+import { FolderPlus, Search, Home, Grid, List } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -24,6 +25,13 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const Dashboard = () => {
   const { user, isAdmin } = useAuth();
@@ -40,6 +48,9 @@ const Dashboard = () => {
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [breadcrumb, setBreadcrumb] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortBy, setSortBy] = useState("name");
+  const [previewFile, setPreviewFile] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
@@ -56,17 +67,29 @@ const Dashboard = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: foldersData } = await supabase
+      let foldersQuery = supabase
         .from("folders")
-        .select("*")
-        .eq("parent_id", folderId || null)
-        .order("name");
+        .select("*");
 
-      const { data: filesData } = await supabase
+      if (folderId) {
+        foldersQuery = foldersQuery.eq("parent_id", folderId);
+      } else {
+        foldersQuery = foldersQuery.is("parent_id", null);
+      }
+
+      const { data: foldersData } = await foldersQuery.order("name");
+
+      let filesQuery = supabase
         .from("files")
-        .select("*")
-        .eq("folder_id", folderId || null)
-        .order("created_at", { ascending: false });
+        .select("*");
+
+      if (folderId) {
+        filesQuery = filesQuery.eq("folder_id", folderId);
+      } else {
+        filesQuery = filesQuery.is("folder_id", null);
+      }
+
+      const { data: filesData } = await filesQuery.order("created_at", { ascending: false });
 
       setFolders(foldersData || []);
       setFiles(filesData || []);
@@ -101,7 +124,7 @@ const Dashboard = () => {
         .from("folders")
         .select("*")
         .eq("id", fId)
-        .single();
+        .maybeSingle();
 
       if (data) {
         path.unshift(data);
@@ -146,12 +169,12 @@ const Dashboard = () => {
 
   const handleFileClick = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
-    if (file) {
-      await supabase.from("files").update({
-        access_count: file.access_count + 1,
-        last_accessed_at: new Date().toISOString(),
-      }).eq("id", fileId);
-    }
+    if (!file) return;
+
+    await supabase.from("files").update({
+      access_count: file.access_count + 1,
+      last_accessed_at: new Date().toISOString(),
+    }).eq("id", fileId);
 
     await supabase.from("file_access_logs").insert({
       file_id: fileId,
@@ -159,25 +182,42 @@ const Dashboard = () => {
       action: "view",
     });
 
+    setPreviewFile(file);
     loadData();
   };
 
   const handleDownload = async (file: any) => {
-    const { data } = await supabase.storage
-      .from("files")
-      .download(file.storage_path);
+    try {
+      const { data, error } = await supabase.storage
+        .from("files")
+        .download(file.storage_path);
 
-    if (data) {
-      const url = URL.createObjectURL(data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = file.name;
-      a.click();
+      if (error) throw error;
 
-      await supabase.from("file_access_logs").insert({
-        file_id: file.id,
-        user_id: user?.id,
-        action: "download",
+      if (data) {
+        const url = URL.createObjectURL(data);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.name;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        await supabase.from("file_access_logs").insert({
+          file_id: file.id,
+          user_id: user?.id,
+          action: "download",
+        });
+
+        toast({
+          title: "Success",
+          description: "File downloaded successfully!",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
       });
     }
   };
@@ -234,12 +274,49 @@ const Dashboard = () => {
     }
   };
 
+  const handleToggleFeatured = async (fileId: string) => {
+    if (!isAdmin) return;
+
+    const file = files.find(f => f.id === fileId);
+    if (!file) return;
+
+    await supabase
+      .from("files")
+      .update({ is_featured: !file.is_featured })
+      .eq("id", fileId);
+
+    toast({
+      title: "Success",
+      description: file.is_featured ? "File unfeatured" : "File featured",
+    });
+
+    loadData();
+  };
+
+  const sortFiles = (filesList: any[]) => {
+    const sorted = [...filesList];
+    switch (sortBy) {
+      case "name":
+        return sorted.sort((a, b) => a.name.localeCompare(b.name));
+      case "date":
+        return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      case "size":
+        return sorted.sort((a, b) => b.file_size - a.file_size);
+      case "type":
+        return sorted.sort((a, b) => a.file_type.localeCompare(b.file_type));
+      default:
+        return sorted;
+    }
+  };
+
   const filteredFolders = folders.filter((folder) =>
     folder.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredFiles = files.filter((file) =>
-    file.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredAndSortedFiles = sortFiles(
+    files.filter((file) =>
+      file.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
   return (
@@ -256,7 +333,7 @@ const Dashboard = () => {
                 </BreadcrumbItem>
                 {breadcrumb.map((folder, index) => (
                   <>
-                    <BreadcrumbSeparator />
+                    <BreadcrumbSeparator key={`sep-${folder.id}`} />
                     <BreadcrumbItem key={folder.id}>
                       {index === breadcrumb.length - 1 ? (
                         <BreadcrumbPage>{folder.name}</BreadcrumbPage>
@@ -292,6 +369,7 @@ const Dashboard = () => {
                     placeholder="Folder name"
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && createFolder()}
                   />
                   <Button onClick={createFolder} className="w-full">
                     Create Folder
@@ -312,6 +390,35 @@ const Dashboard = () => {
               className="pl-9"
             />
           </div>
+
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="date">Date</SelectItem>
+              <SelectItem value="size">Size</SelectItem>
+              <SelectItem value="type">Type</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <div className="flex gap-1 border rounded-md p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+            >
+              <Grid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("list")}
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <FileUpload folderId={folderId || undefined} onUploadComplete={loadData} />
@@ -321,23 +428,34 @@ const Dashboard = () => {
         ) : (
           <FolderGrid
             folders={filteredFolders}
-            files={filteredFiles}
+            files={filteredAndSortedFiles}
             onFolderClick={handleFolderClick}
             onFileClick={handleFileClick}
             onDownload={handleDownload}
             onDelete={handleDelete}
             onToggleFavorite={handleToggleFavorite}
+            onToggleFeatured={handleToggleFeatured}
             isAdmin={isAdmin}
             favorites={favorites}
+            viewMode={viewMode}
           />
         )}
 
-        {!loading && filteredFolders.length === 0 && filteredFiles.length === 0 && (
+        {!loading && filteredFolders.length === 0 && filteredAndSortedFiles.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             {searchQuery
               ? "No files or folders match your search"
               : "No files or folders yet"}
           </div>
+        )}
+
+        {previewFile && (
+          <FilePreviewDialog
+            file={previewFile}
+            open={!!previewFile}
+            onClose={() => setPreviewFile(null)}
+            onDownload={() => handleDownload(previewFile)}
+          />
         )}
       </div>
     </Layout>

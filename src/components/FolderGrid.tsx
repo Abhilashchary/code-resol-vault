@@ -1,4 +1,4 @@
-import { Folder, File, MoreVertical, Download, Trash2, Star, Eye, User } from "lucide-react";
+import { Folder, File, MoreVertical, Download, Trash2, Star, Eye, User, FolderOpen, StarOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,9 @@ interface FolderGridProps {
   onDownload: (file: any) => void;
   onDelete: (type: "folder" | "file", id: string) => void;
   onToggleFavorite: (fileId: string) => void;
+  onMoveFile?: (fileId: string, targetFolderId: string | null) => void;
+  allFolders?: any[];
+  currentFolderId?: string | null;
   isAdmin: boolean;
   favorites: Set<string>;
   viewMode?: "grid" | "list";
@@ -32,6 +36,9 @@ const FolderGrid = ({
   onDownload,
   onDelete,
   onToggleFavorite,
+  onMoveFile,
+  allFolders,
+  currentFolderId,
   isAdmin,
   favorites,
   viewMode = "grid",
@@ -68,10 +75,16 @@ const FolderGrid = ({
                   <Folder className="h-6 w-6 text-primary flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold truncate">{folder.name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-muted-foreground">
+                        {folder.files?.[0]?.count || 0} files
+                      </p>
+                      <span className="text-muted-foreground">•</span>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(folder.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(folder.created_at).toLocaleDateString()}
-                  </p>
                 </div>
                 {isAdmin && (
                   <DropdownMenu>
@@ -139,7 +152,7 @@ const FolderGrid = ({
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent>
+                   <DropdownMenuContent>
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
@@ -162,6 +175,35 @@ const FolderGrid = ({
                       <Download className="mr-2 h-4 w-4" />
                       Download
                     </DropdownMenuItem>
+                    {onMoveFile && allFolders && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Move to Folder</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMoveFile(file.id, null);
+                          }}
+                          disabled={!currentFolderId}
+                        >
+                          <FolderOpen className="mr-2 h-4 w-4" />
+                          Root Folder
+                        </DropdownMenuItem>
+                        {allFolders.map((folder) => (
+                          <DropdownMenuItem
+                            key={folder.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onMoveFile(file.id, folder.id);
+                            }}
+                            disabled={currentFolderId === folder.id}
+                          >
+                            <Folder className="mr-2 h-4 w-4" />
+                            {folder.name}
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
                     {isAdmin && (
                       <>
                         <DropdownMenuSeparator />
@@ -195,17 +237,23 @@ const FolderGrid = ({
           className="hover:shadow-lg transition-shadow cursor-pointer"
           onClick={() => onFolderClick(folder.id)}
         >
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <Folder className="h-8 w-8 text-primary flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold truncate">{folder.name}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(folder.created_at).toLocaleDateString()}
-                  </p>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <Folder className="h-8 w-8 text-primary flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold truncate">{folder.name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-muted-foreground">
+                        {folder.files?.[0]?.count || 0} files
+                      </p>
+                      <span className="text-muted-foreground">•</span>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(folder.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
               {isAdmin && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -280,6 +328,35 @@ const FolderGrid = ({
                     <Download className="mr-2 h-4 w-4" />
                     Download
                   </DropdownMenuItem>
+                  {onMoveFile && allFolders && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Move to Folder</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMoveFile(file.id, null);
+                        }}
+                        disabled={!currentFolderId}
+                      >
+                        <FolderOpen className="mr-2 h-4 w-4" />
+                        Root Folder
+                      </DropdownMenuItem>
+                      {allFolders.map((folder) => (
+                        <DropdownMenuItem
+                          key={folder.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMoveFile(file.id, folder.id);
+                          }}
+                          disabled={currentFolderId === folder.id}
+                        >
+                          <Folder className="mr-2 h-4 w-4" />
+                          {folder.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
                   {isAdmin && (
                     <>
                       <DropdownMenuSeparator />

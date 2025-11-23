@@ -69,7 +69,11 @@ const Dashboard = () => {
     try {
       let foldersQuery = supabase
         .from("folders")
-        .select("*, created_by_profile:profiles!folders_created_by_fkey(full_name)");
+        .select(`
+          *, 
+          created_by_profile:profiles!folders_created_by_fkey(full_name),
+          files(count)
+        `);
 
       if (folderId) {
         foldersQuery = foldersQuery.eq("parent_id", folderId);
@@ -202,16 +206,24 @@ const Dashboard = () => {
         a.click();
         URL.revokeObjectURL(url);
 
-        await supabase.from("file_access_logs").insert({
-          file_id: file.id,
-          user_id: user?.id,
-          action: "download",
-        });
+        await Promise.all([
+          supabase.from("file_access_logs").insert({
+            file_id: file.id,
+            user_id: user?.id,
+            action: "download",
+          }),
+          supabase.from("files").update({
+            access_count: file.access_count + 1,
+            last_accessed_at: new Date().toISOString(),
+          }).eq("id", file.id)
+        ]);
 
         toast({
           title: "Success",
           description: "File downloaded successfully!",
         });
+
+        await loadData();
       }
     } catch (error: any) {
       toast({
@@ -271,6 +283,30 @@ const Dashboard = () => {
         user_id: user?.id,
       });
       setFavorites((prev) => new Set(prev).add(fileId));
+    }
+  };
+
+  const handleMoveFile = async (fileId: string, targetFolderId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from("files")
+        .update({ folder_id: targetFolderId })
+        .eq("id", fileId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "File moved successfully",
+      });
+
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: "Error moving file",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -416,6 +452,9 @@ const Dashboard = () => {
             onDownload={handleDownload}
             onDelete={handleDelete}
             onToggleFavorite={handleToggleFavorite}
+            onMoveFile={handleMoveFile}
+            allFolders={folders}
+            currentFolderId={folderId}
             isAdmin={isAdmin}
             favorites={favorites}
             viewMode={viewMode}

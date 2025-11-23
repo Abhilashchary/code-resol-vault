@@ -95,15 +95,17 @@ const Favorites = () => {
         ) : (
           <FolderGrid
             folders={[]}
-            files={files}
-            onFolderClick={() => {}}
-            onFileClick={handleFileClick}
-            onDownload={handleDownload}
-            onDelete={handleDelete}
-            onToggleFavorite={handleToggleFavorite}
-            isAdmin={isAdmin}
-            favorites={favorites}
-          />
+        files={files}
+        onFolderClick={() => {}}
+        onFileClick={handleFileClick}
+        onDownload={handleDownload}
+        onDelete={handleDelete}
+        onToggleFavorite={handleToggleFavorite}
+        onMoveFile={() => {}}
+        allFolders={[]}
+        isAdmin={isAdmin}
+        favorites={favorites}
+      />
         )}
 
         {!loading && files.length === 0 && (

@@ -22,7 +22,7 @@ const Favorites = () => {
     setLoading(true);
     const { data: favData } = await supabase
       .from("favorites")
-      .select("file_id, files(*)")
+      .select("file_id, files(*, uploader_profile:profiles!files_uploaded_by_fkey(full_name))")
       .eq("user_id", user?.id);
 
     if (favData) {

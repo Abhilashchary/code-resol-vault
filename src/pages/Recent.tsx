@@ -25,7 +25,7 @@ const Recent = () => {
     setLoading(true);
     const { data } = await supabase
       .from("files")
-      .select("*")
+      .select("*, uploader_profile:profiles!files_uploaded_by_fkey(full_name)")
       .order("last_accessed_at", { ascending: false, nullsFirst: false })
       .limit(50);
 

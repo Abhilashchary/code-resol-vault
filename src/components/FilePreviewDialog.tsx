@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, X, FileText, Image, Video, Music, File as FileIcon } from "lucide-react";
+import { Download, X, FileText, Image, Video, Music, File as FileIcon, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface FilePreviewDialogProps {
@@ -151,7 +151,12 @@ const FilePreviewDialog = ({ file, open, onClose, onDownload }: FilePreviewDialo
               <div className="flex gap-2 mt-2 flex-wrap">
                 <Badge variant="outline">{formatFileSize(file?.file_size || 0)}</Badge>
                 <Badge variant="outline">{file?.file_type}</Badge>
-                {file?.is_featured && <Badge className="bg-yellow-500">Featured</Badge>}
+                {file?.uploader_profile?.full_name && (
+                  <Badge variant="secondary">
+                    <User className="h-3 w-3 mr-1" />
+                    {file.uploader_profile.full_name}
+                  </Badge>
+                )}
               </div>
             </div>
             <Button
@@ -184,6 +189,12 @@ const FilePreviewDialog = ({ file, open, onClose, onDownload }: FilePreviewDialo
         )}
 
         <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+          {file?.uploader_profile?.full_name && (
+            <div>
+              <p className="text-muted-foreground">Uploaded By</p>
+              <p className="font-medium">{file.uploader_profile.full_name}</p>
+            </div>
+          )}
           <div>
             <p className="text-muted-foreground">Uploaded</p>
             <p>{new Date(file?.created_at).toLocaleString()}</p>

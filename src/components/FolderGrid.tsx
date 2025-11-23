@@ -1,4 +1,4 @@
-import { Folder, File, MoreVertical, Download, Trash2, Star, Award, Eye } from "lucide-react";
+import { Folder, File, MoreVertical, Download, Trash2, Star, Eye, User } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +19,6 @@ interface FolderGridProps {
   onDownload: (file: any) => void;
   onDelete: (type: "folder" | "file", id: string) => void;
   onToggleFavorite: (fileId: string) => void;
-  onToggleFeatured?: (fileId: string) => void;
   isAdmin: boolean;
   favorites: Set<string>;
   viewMode?: "grid" | "list";
@@ -33,7 +32,6 @@ const FolderGrid = ({
   onDownload,
   onDelete,
   onToggleFavorite,
-  onToggleFeatured,
   isAdmin,
   favorites,
   viewMode = "grid",
@@ -104,10 +102,7 @@ const FolderGrid = ({
         {files.map((file) => (
           <Card
             key={file.id}
-            className={cn(
-              "hover:shadow-md transition-shadow cursor-pointer",
-              file.is_featured && "border-yellow-500 border-2"
-            )}
+            className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/20"
             onClick={() => onFileClick(file.id)}
           >
             <CardContent className="p-4">
@@ -117,13 +112,8 @@ const FolderGrid = ({
                     {getFileIcon(file.file_type)}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold truncate text-sm">{file.name}</h3>
-                      {file.is_featured && (
-                        <Badge className="bg-yellow-500 text-xs">Featured</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
+                    <h3 className="font-semibold truncate text-sm">{file.name}</h3>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <Badge variant="outline" className="text-xs">
                         {formatFileSize(file.file_size)}
                       </Badge>
@@ -131,6 +121,12 @@ const FolderGrid = ({
                         <Eye className="h-3 w-3 mr-1" />
                         {file.access_count}
                       </Badge>
+                      {file.uploader_profile?.full_name && (
+                        <Badge variant="secondary" className="text-xs">
+                          <User className="h-3 w-3 mr-1" />
+                          {file.uploader_profile.full_name}
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {new Date(file.created_at).toLocaleDateString()}
                       </span>
@@ -166,20 +162,6 @@ const FolderGrid = ({
                       <Download className="mr-2 h-4 w-4" />
                       Download
                     </DropdownMenuItem>
-                    {isAdmin && onToggleFeatured && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleFeatured(file.id);
-                          }}
-                        >
-                          <Award className="mr-2 h-4 w-4" />
-                          {file.is_featured ? "Unfeature" : "Feature"}
-                        </DropdownMenuItem>
-                      </>
-                    )}
                     {isAdmin && (
                       <>
                         <DropdownMenuSeparator />
@@ -253,25 +235,17 @@ const FolderGrid = ({
       {files.map((file) => (
         <Card
           key={file.id}
-          className={cn(
-            "hover:shadow-lg transition-shadow cursor-pointer relative",
-            file.is_featured && "border-yellow-500 border-2"
-          )}
+          className="hover:shadow-lg transition-all cursor-pointer relative group border-l-4 border-l-primary/30 hover:border-l-primary"
           onClick={() => onFileClick(file.id)}
         >
-          {file.is_featured && (
-            <div className="absolute top-2 right-2 bg-yellow-500 text-white p-1 rounded-full">
-              <Award className="h-4 w-4" />
-            </div>
-          )}
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between mb-2">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <span className="text-3xl flex-shrink-0">
-                  {getFileIcon(file.file_type)}
-                </span>
+                <div className="bg-primary/10 p-3 rounded-lg">
+                  <span className="text-3xl">{getFileIcon(file.file_type)}</span>
+                </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold truncate text-sm">{file.name}</h3>
+                  <h3 className="font-semibold truncate mb-1">{file.name}</h3>
                   <p className="text-xs text-muted-foreground">
                     {formatFileSize(file.file_size)}
                   </p>
@@ -279,11 +253,11 @@ const FolderGrid = ({
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
+                <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
@@ -306,20 +280,6 @@ const FolderGrid = ({
                     <Download className="mr-2 h-4 w-4" />
                     Download
                   </DropdownMenuItem>
-                  {isAdmin && onToggleFeatured && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleFeatured(file.id);
-                        }}
-                      >
-                        <Award className="mr-2 h-4 w-4" />
-                        {file.is_featured ? "Unfeature" : "Feature"}
-                      </DropdownMenuItem>
-                    </>
-                  )}
                   {isAdmin && (
                     <>
                       <DropdownMenuSeparator />
@@ -338,12 +298,20 @@ const FolderGrid = ({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="text-xs">
                 <Eye className="h-3 w-3 mr-1" />
-                {file.access_count}
+                {file.access_count} views
               </Badge>
-              <span>{new Date(file.created_at).toLocaleDateString()}</span>
+              {file.uploader_profile?.full_name && (
+                <Badge variant="secondary" className="text-xs">
+                  <User className="h-3 w-3 mr-1" />
+                  {file.uploader_profile.full_name}
+                </Badge>
+              )}
+              <span className="text-xs text-muted-foreground ml-auto">
+                {new Date(file.created_at).toLocaleDateString()}
+              </span>
             </div>
           </CardContent>
         </Card>

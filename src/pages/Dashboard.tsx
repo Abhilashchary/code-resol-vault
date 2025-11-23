@@ -69,7 +69,7 @@ const Dashboard = () => {
     try {
       let foldersQuery = supabase
         .from("folders")
-        .select("*");
+        .select("*, created_by_profile:profiles!folders_created_by_fkey(full_name)");
 
       if (folderId) {
         foldersQuery = foldersQuery.eq("parent_id", folderId);
@@ -81,7 +81,7 @@ const Dashboard = () => {
 
       let filesQuery = supabase
         .from("files")
-        .select("*");
+        .select("*, uploader_profile:profiles!files_uploaded_by_fkey(full_name)");
 
       if (folderId) {
         filesQuery = filesQuery.eq("folder_id", folderId);
@@ -274,24 +274,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleToggleFeatured = async (fileId: string) => {
-    if (!isAdmin) return;
-
-    const file = files.find(f => f.id === fileId);
-    if (!file) return;
-
-    await supabase
-      .from("files")
-      .update({ is_featured: !file.is_featured })
-      .eq("id", fileId);
-
-    toast({
-      title: "Success",
-      description: file.is_featured ? "File unfeatured" : "File featured",
-    });
-
-    loadData();
-  };
 
   const sortFiles = (filesList: any[]) => {
     const sorted = [...filesList];
@@ -434,7 +416,6 @@ const Dashboard = () => {
             onDownload={handleDownload}
             onDelete={handleDelete}
             onToggleFavorite={handleToggleFavorite}
-            onToggleFeatured={handleToggleFeatured}
             isAdmin={isAdmin}
             favorites={favorites}
             viewMode={viewMode}

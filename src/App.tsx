@@ -11,6 +11,7 @@ import Favorites from "./pages/Favorites";
 import Tags from "./pages/Tags";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import SharePage from "./pages/SharePage";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/auth" element={<Auth />} />
+          <Route path="/share/:token" element={<SharePage />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/recent" element={<ProtectedRoute><Recent /></ProtectedRoute>} />
           <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />

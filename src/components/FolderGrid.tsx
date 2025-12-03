@@ -1,6 +1,7 @@
-import { Folder, File, MoreVertical, Download, Trash2, Star, Eye, User, FolderOpen, StarOff } from "lucide-react";
+import { Folder, File, MoreVertical, Download, Trash2, Star, Eye, User, FolderOpen, Share2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,11 +22,15 @@ interface FolderGridProps {
   onDelete: (type: "folder" | "file", id: string) => void;
   onToggleFavorite: (fileId: string) => void;
   onMoveFile?: (fileId: string, targetFolderId: string | null) => void;
+  onShare?: (file: any) => void;
   allFolders?: any[];
   currentFolderId?: string | null;
   isAdmin: boolean;
   favorites: Set<string>;
   viewMode?: "grid" | "list";
+  selectedFiles?: Set<string>;
+  onToggleSelect?: (fileId: string) => void;
+  selectionMode?: boolean;
 }
 
 const FolderGrid = ({
@@ -37,11 +42,15 @@ const FolderGrid = ({
   onDelete,
   onToggleFavorite,
   onMoveFile,
+  onShare,
   allFolders,
   currentFolderId,
   isAdmin,
   favorites,
   viewMode = "grid",
+  selectedFiles = new Set(),
+  onToggleSelect,
+  selectionMode = false,
 }: FolderGridProps) => {
   const getFileIcon = (fileType: string) => {
     if (fileType.startsWith("image/")) return "🖼️";
@@ -58,6 +67,15 @@ const FolderGrid = ({
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
     return (bytes / 1024 / 1024).toFixed(2) + " MB";
+  };
+
+  const handleCardClick = (file: any, e: React.MouseEvent) => {
+    if (selectionMode && onToggleSelect) {
+      e.stopPropagation();
+      onToggleSelect(file.id);
+    } else {
+      onFileClick(file.id);
+    }
   };
 
   if (viewMode === "list") {
@@ -115,12 +133,22 @@ const FolderGrid = ({
         {files.map((file) => (
           <Card
             key={file.id}
-            className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/20"
-            onClick={() => onFileClick(file.id)}
+            className={cn(
+              "hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/20",
+              selectedFiles.has(file.id) && "ring-2 ring-primary border-l-primary"
+            )}
+            onClick={(e) => handleCardClick(file, e)}
           >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
+                  {selectionMode && onToggleSelect && (
+                    <Checkbox
+                      checked={selectedFiles.has(file.id)}
+                      onCheckedChange={() => onToggleSelect(file.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
                   <span className="text-2xl flex-shrink-0">
                     {getFileIcon(file.file_type)}
                   </span>
@@ -152,7 +180,7 @@ const FolderGrid = ({
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                   <DropdownMenuContent>
+                  <DropdownMenuContent>
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
@@ -175,6 +203,17 @@ const FolderGrid = ({
                       <Download className="mr-2 h-4 w-4" />
                       Download
                     </DropdownMenuItem>
+                    {onShare && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onShare(file);
+                        }}
+                      >
+                        <Share2 className="mr-2 h-4 w-4" />
+                        Share
+                      </DropdownMenuItem>
+                    )}
                     {onMoveFile && allFolders && (
                       <>
                         <DropdownMenuSeparator />
@@ -237,23 +276,23 @@ const FolderGrid = ({
           className="hover:shadow-lg transition-shadow cursor-pointer"
           onClick={() => onFolderClick(folder.id)}
         >
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <Folder className="h-8 w-8 text-primary flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold truncate">{folder.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-xs text-muted-foreground">
-                        {folder.files?.[0]?.count || 0} files
-                      </p>
-                      <span className="text-muted-foreground">•</span>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(folder.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <Folder className="h-8 w-8 text-primary flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold truncate">{folder.name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-xs text-muted-foreground">
+                      {folder.files?.[0]?.count || 0} files
+                    </p>
+                    <span className="text-muted-foreground">•</span>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(folder.created_at).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
+              </div>
               {isAdmin && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -283,12 +322,22 @@ const FolderGrid = ({
       {files.map((file) => (
         <Card
           key={file.id}
-          className="hover:shadow-lg transition-all cursor-pointer relative group border-l-4 border-l-primary/30 hover:border-l-primary"
-          onClick={() => onFileClick(file.id)}
+          className={cn(
+            "hover:shadow-lg transition-all cursor-pointer relative group border-l-4 border-l-primary/30 hover:border-l-primary",
+            selectedFiles.has(file.id) && "ring-2 ring-primary border-l-primary"
+          )}
+          onClick={(e) => handleCardClick(file, e)}
         >
           <CardContent className="p-6">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3 flex-1 min-w-0">
+                {selectionMode && onToggleSelect && (
+                  <Checkbox
+                    checked={selectedFiles.has(file.id)}
+                    onCheckedChange={() => onToggleSelect(file.id)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
                 <div className="bg-primary/10 p-3 rounded-lg">
                   <span className="text-3xl">{getFileIcon(file.file_type)}</span>
                 </div>
@@ -328,6 +377,17 @@ const FolderGrid = ({
                     <Download className="mr-2 h-4 w-4" />
                     Download
                   </DropdownMenuItem>
+                  {onShare && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShare(file);
+                      }}
+                    >
+                      <Share2 className="mr-2 h-4 w-4" />
+                      Share
+                    </DropdownMenuItem>
+                  )}
                   {onMoveFile && allFolders && (
                     <>
                       <DropdownMenuSeparator />

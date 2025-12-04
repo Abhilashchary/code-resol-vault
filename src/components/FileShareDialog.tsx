@@ -28,33 +28,32 @@ const FileShareDialog = ({ file, open, onClose }: FileShareDialogProps) => {
   const [copied, setCopied] = useState(false);
   const [hasExpiry, setHasExpiry] = useState(false);
   const [expiryDays, setExpiryDays] = useState(7);
-  const [hasMaxDownloads, setHasMaxDownloads] = useState(false);
-  const [maxDownloads, setMaxDownloads] = useState(10);
+  const [hasDownloadLimit, setHasDownloadLimit] = useState(false);
+  const [downloadLimit, setDownloadLimit] = useState(10);
 
   const generateShareLink = async () => {
     if (!user || !file) return;
 
     setLoading(true);
     try {
+      const token = crypto.randomUUID();
       const expiresAt = hasExpiry 
         ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString()
         : null;
 
-      // Use type assertion for the new table
-      const { data, error } = await (supabase as any)
+      const { error } = await supabase
         .from("file_share_links")
         .insert({
           file_id: file.id,
+          token: token,
           created_by: user.id,
           expires_at: expiresAt,
-          max_downloads: hasMaxDownloads ? maxDownloads : null,
-        })
-        .select()
-        .single();
+          download_limit: hasDownloadLimit ? downloadLimit : null,
+        });
 
       if (error) throw error;
 
-      const link = `${window.location.origin}/share/${data.share_token}`;
+      const link = `${window.location.origin}/share/${token}`;
       setShareLink(link);
 
       toast({
@@ -96,7 +95,7 @@ const FileShareDialog = ({ file, open, onClose }: FileShareDialogProps) => {
     setShareLink(null);
     setCopied(false);
     setHasExpiry(false);
-    setHasMaxDownloads(false);
+    setHasDownloadLimit(false);
     onClose();
   };
 
@@ -150,27 +149,27 @@ const FileShareDialog = ({ file, open, onClose }: FileShareDialogProps) => {
                 )}
 
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="max-downloads" className="flex flex-col gap-1">
+                  <Label htmlFor="download-limit" className="flex flex-col gap-1">
                     <span>Limit downloads</span>
                     <span className="font-normal text-muted-foreground text-xs">
                       Maximum number of downloads allowed
                     </span>
                   </Label>
                   <Switch
-                    id="max-downloads"
-                    checked={hasMaxDownloads}
-                    onCheckedChange={setHasMaxDownloads}
+                    id="download-limit"
+                    checked={hasDownloadLimit}
+                    onCheckedChange={setHasDownloadLimit}
                   />
                 </div>
 
-                {hasMaxDownloads && (
+                {hasDownloadLimit && (
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
                       min={1}
                       max={1000}
-                      value={maxDownloads}
-                      onChange={(e) => setMaxDownloads(Number(e.target.value))}
+                      value={downloadLimit}
+                      onChange={(e) => setDownloadLimit(Number(e.target.value))}
                       className="w-20"
                     />
                     <span className="text-sm text-muted-foreground">downloads</span>
@@ -210,8 +209,8 @@ const FileShareDialog = ({ file, open, onClose }: FileShareDialogProps) => {
 
               <div className="text-sm text-muted-foreground space-y-1">
                 {hasExpiry && <p>• Expires in {expiryDays} days</p>}
-                {hasMaxDownloads && <p>• Limited to {maxDownloads} downloads</p>}
-                {!hasExpiry && !hasMaxDownloads && <p>• No expiration or download limits</p>}
+                {hasDownloadLimit && <p>• Limited to {downloadLimit} downloads</p>}
+                {!hasExpiry && !hasDownloadLimit && <p>• No expiration or download limits</p>}
               </div>
 
               <Button 

@@ -5,7 +5,10 @@ import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import FolderGrid from "@/components/FolderGrid";
 import FileUpload from "@/components/FileUpload";
+import BulkFileUpload from "@/components/BulkFileUpload";
 import FilePreviewDialog from "@/components/FilePreviewDialog";
+import FileShareDialog from "@/components/FileShareDialog";
+import BulkOperationsBar from "@/components/BulkOperationsBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,8 +18,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { FolderPlus, Search, Home, Grid, List } from "lucide-react";
+import { FolderPlus, Search, Home, Grid, List, CheckSquare } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -51,6 +55,9 @@ const Dashboard = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState("name");
   const [previewFile, setPreviewFile] = useState<any>(null);
+  const [shareFile, setShareFile] = useState<any>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -310,6 +317,66 @@ const Dashboard = () => {
     }
   };
 
+  const handleShare = (file: any) => {
+    setShareFile(file);
+  };
+
+  const handleToggleSelect = (fileId: string) => {
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDownload = async () => {
+    const selectedFilesList = files.filter(f => selectedFiles.has(f.id));
+    for (const file of selectedFilesList) {
+      await handleDownload(file);
+    }
+    setSelectedFiles(new Set());
+    setSelectionMode(false);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!isAdmin) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedFiles.size} file(s)?`
+    );
+    if (!confirmed) return;
+
+    for (const fileId of selectedFiles) {
+      const file = files.find(f => f.id === fileId);
+      if (file) {
+        await supabase.storage.from("files").remove([file.storage_path]);
+        await supabase.from("files").delete().eq("id", fileId);
+      }
+    }
+
+    toast({ title: "Success", description: `${selectedFiles.size} files deleted` });
+    setSelectedFiles(new Set());
+    setSelectionMode(false);
+    loadData();
+  };
+
+  const handleBulkMove = async (targetFolderId: string | null) => {
+    for (const fileId of selectedFiles) {
+      await supabase
+        .from("files")
+        .update({ folder_id: targetFolderId })
+        .eq("id", fileId);
+    }
+
+    toast({ title: "Success", description: `${selectedFiles.size} files moved` });
+    setSelectedFiles(new Set());
+    setSelectionMode(false);
+    loadData();
+  };
 
   const sortFiles = (filesList: any[]) => {
     const sorted = [...filesList];
@@ -350,9 +417,9 @@ const Dashboard = () => {
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 {breadcrumb.map((folder, index) => (
-                  <>
-                    <BreadcrumbSeparator key={`sep-${folder.id}`} />
-                    <BreadcrumbItem key={folder.id}>
+                  <span key={folder.id} className="contents">
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
                       {index === breadcrumb.length - 1 ? (
                         <BreadcrumbPage>{folder.name}</BreadcrumbPage>
                       ) : (
@@ -361,7 +428,7 @@ const Dashboard = () => {
                         </BreadcrumbLink>
                       )}
                     </BreadcrumbItem>
-                  </>
+                  </span>
                 ))}
               </BreadcrumbList>
             </Breadcrumb>
@@ -371,6 +438,16 @@ const Dashboard = () => {
           </div>
 
           <div className="flex gap-2">
+            <Button
+              variant={selectionMode ? "secondary" : "outline"}
+              onClick={() => {
+                setSelectionMode(!selectionMode);
+                setSelectedFiles(new Set());
+              }}
+            >
+              <CheckSquare className="mr-2 h-4 w-4" />
+              {selectionMode ? "Cancel" : "Select"}
+            </Button>
             <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -439,7 +516,31 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <FileUpload folderId={folderId || undefined} onUploadComplete={loadData} />
+        {selectionMode && (
+          <BulkOperationsBar
+            selectedCount={selectedFiles.size}
+            onClear={() => setSelectedFiles(new Set())}
+            onDownloadAll={handleBulkDownload}
+            onDeleteAll={handleBulkDelete}
+            onMoveAll={handleBulkMove}
+            folders={folders}
+            currentFolderId={folderId}
+            isAdmin={isAdmin}
+          />
+        )}
+
+        <Tabs defaultValue="single" className="w-full">
+          <TabsList>
+            <TabsTrigger value="single">Single Upload</TabsTrigger>
+            <TabsTrigger value="bulk">Bulk Upload</TabsTrigger>
+          </TabsList>
+          <TabsContent value="single">
+            <FileUpload folderId={folderId || undefined} onUploadComplete={loadData} />
+          </TabsContent>
+          <TabsContent value="bulk">
+            <BulkFileUpload folderId={folderId || undefined} onUploadComplete={loadData} />
+          </TabsContent>
+        </Tabs>
 
         {loading ? (
           <div className="text-center py-12">Loading...</div>
@@ -453,11 +554,15 @@ const Dashboard = () => {
             onDelete={handleDelete}
             onToggleFavorite={handleToggleFavorite}
             onMoveFile={handleMoveFile}
+            onShare={handleShare}
             allFolders={folders}
             currentFolderId={folderId}
             isAdmin={isAdmin}
             favorites={favorites}
             viewMode={viewMode}
+            selectionMode={selectionMode}
+            selectedFiles={selectedFiles}
+            onToggleSelect={handleToggleSelect}
           />
         )}
 
@@ -475,6 +580,14 @@ const Dashboard = () => {
             open={!!previewFile}
             onClose={() => setPreviewFile(null)}
             onDownload={() => handleDownload(previewFile)}
+          />
+        )}
+
+        {shareFile && (
+          <FileShareDialog
+            file={shareFile}
+            open={!!shareFile}
+            onClose={() => setShareFile(null)}
           />
         )}
       </div>

@@ -89,6 +89,47 @@ export type Database = {
           },
         ]
       }
+      file_share_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          download_count: number
+          download_limit: number | null
+          expires_at: string | null
+          file_id: string
+          id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          download_count?: number
+          download_limit?: number | null
+          expires_at?: string | null
+          file_id: string
+          id?: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          download_count?: number
+          download_limit?: number | null
+          expires_at?: string | null
+          file_id?: string
+          id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_share_links_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       file_tags: {
         Row: {
           created_at: string

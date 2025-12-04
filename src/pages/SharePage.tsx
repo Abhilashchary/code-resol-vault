@@ -27,12 +27,10 @@ const SharePage = () => {
     }
 
     try {
-      // Get share link data using type assertion for new table
-      const { data: share, error: shareError } = await (supabase as any)
+      const { data: share, error: shareError } = await supabase
         .from("file_share_links")
         .select("*")
-        .eq("share_token", token)
-        .eq("is_active", true)
+        .eq("token", token)
         .maybeSingle();
 
       if (shareError) throw shareError;
@@ -51,7 +49,7 @@ const SharePage = () => {
       }
 
       // Check download limit
-      if (share.max_downloads && share.download_count >= share.max_downloads) {
+      if (share.download_limit && share.download_count >= share.download_limit) {
         setError("This share link has reached its download limit");
         setLoading(false);
         return;
@@ -88,7 +86,7 @@ const SharePage = () => {
       if (error) throw error;
 
       // Update download count
-      await (supabase as any)
+      await supabase
         .from("file_share_links")
         .update({ download_count: shareData.download_count + 1 })
         .eq("id", shareData.id);
@@ -180,9 +178,9 @@ const SharePage = () => {
                 Expires: {new Date(shareData.expires_at).toLocaleDateString()}
               </p>
             )}
-            {shareData?.max_downloads && (
+            {shareData?.download_limit && (
               <p>
-                Downloads: {shareData.download_count} / {shareData.max_downloads}
+                Downloads: {shareData.download_count} / {shareData.download_limit}
               </p>
             )}
           </div>

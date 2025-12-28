@@ -3,16 +3,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import FolderGrid from "@/components/FolderGrid";
+import FilePreviewDialog from "@/components/FilePreviewDialog";
+import FileShareDialog from "@/components/FileShareDialog";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
 
 const Recent = () => {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
   const [files, setFiles] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [previewFile, setPreviewFile] = useState<any>(null);
+  const [shareFile, setShareFile] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
@@ -23,12 +25,15 @@ const Recent = () => {
 
   const loadData = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("files")
       .select("*, uploader_profile:profiles!files_uploaded_by_fkey(full_name)")
       .order("last_accessed_at", { ascending: false, nullsFirst: false })
       .limit(50);
 
+    if (error) {
+      toast({ title: "Error", description: "Failed to load files", variant: "destructive" });
+    }
     setFiles(data || []);
     setLoading(false);
   };
@@ -45,13 +50,26 @@ const Recent = () => {
   };
 
   const handleFileClick = async (fileId: string) => {
-    await supabase.from("file_access_logs").insert({
-      file_id: fileId,
-      user_id: user?.id,
-      action: "view",
-    });
+    const file = files.find((f) => f.id === fileId);
+    if (!file) return;
 
-    loadData();
+    // Update access count and log
+    await Promise.all([
+      supabase
+        .from("files")
+        .update({
+          access_count: (file.access_count || 0) + 1,
+          last_accessed_at: new Date().toISOString(),
+        })
+        .eq("id", fileId),
+      supabase.from("file_access_logs").insert({
+        file_id: fileId,
+        user_id: user?.id,
+        action: "view",
+      }),
+    ]);
+
+    setPreviewFile(file);
   };
 
   const handleDownload = async (file: any) => {
@@ -65,6 +83,7 @@ const Recent = () => {
       a.href = url;
       a.download = file.name;
       a.click();
+      URL.revokeObjectURL(url);
 
       await supabase.from("file_access_logs").insert({
         file_id: file.id,
@@ -107,6 +126,10 @@ const Recent = () => {
     }
   };
 
+  const handleShare = (file: any) => {
+    setShareFile(file);
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -120,17 +143,18 @@ const Recent = () => {
         ) : (
           <FolderGrid
             folders={[]}
-        files={files}
-        onFolderClick={() => {}}
-        onFileClick={handleFileClick}
-        onDownload={handleDownload}
-        onDelete={handleDelete}
-        onToggleFavorite={handleToggleFavorite}
-        onMoveFile={() => {}}
-        allFolders={[]}
-        isAdmin={isAdmin}
-        favorites={favorites}
-      />
+            files={files}
+            onFolderClick={() => {}}
+            onFileClick={handleFileClick}
+            onDownload={handleDownload}
+            onDelete={handleDelete}
+            onToggleFavorite={handleToggleFavorite}
+            onMoveFile={() => {}}
+            onShare={handleShare}
+            allFolders={[]}
+            isAdmin={isAdmin}
+            favorites={favorites}
+          />
         )}
 
         {!loading && files.length === 0 && (
@@ -139,6 +163,19 @@ const Recent = () => {
           </div>
         )}
       </div>
+
+      <FilePreviewDialog
+        file={previewFile}
+        open={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        onDownload={() => previewFile && handleDownload(previewFile)}
+      />
+
+      <FileShareDialog
+        file={shareFile}
+        open={!!shareFile}
+        onClose={() => setShareFile(null)}
+      />
     </Layout>
   );
 };

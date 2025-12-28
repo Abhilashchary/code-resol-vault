@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import FolderGrid from "@/components/FolderGrid";
+import FilePreviewDialog from "@/components/FilePreviewDialog";
+import FileShareDialog from "@/components/FileShareDialog";
 import { useToast } from "@/hooks/use-toast";
 
 const Favorites = () => {
@@ -11,6 +13,8 @@ const Favorites = () => {
   const [files, setFiles] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [previewFile, setPreviewFile] = useState<any>(null);
+  const [shareFile, setShareFile] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
@@ -20,10 +24,14 @@ const Favorites = () => {
 
   const loadData = async () => {
     setLoading(true);
-    const { data: favData } = await supabase
+    const { data: favData, error } = await supabase
       .from("favorites")
       .select("file_id, files(*, uploader_profile:profiles!files_uploaded_by_fkey(full_name))")
       .eq("user_id", user?.id);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to load favorites", variant: "destructive" });
+    }
 
     if (favData) {
       const filesList = favData.map((item: any) => item.files).filter(Boolean);
@@ -34,11 +42,26 @@ const Favorites = () => {
   };
 
   const handleFileClick = async (fileId: string) => {
-    await supabase.from("file_access_logs").insert({
-      file_id: fileId,
-      user_id: user?.id,
-      action: "view",
-    });
+    const file = files.find((f) => f.id === fileId);
+    if (!file) return;
+
+    // Update access count and log
+    await Promise.all([
+      supabase
+        .from("files")
+        .update({
+          access_count: (file.access_count || 0) + 1,
+          last_accessed_at: new Date().toISOString(),
+        })
+        .eq("id", fileId),
+      supabase.from("file_access_logs").insert({
+        file_id: fileId,
+        user_id: user?.id,
+        action: "view",
+      }),
+    ]);
+
+    setPreviewFile(file);
   };
 
   const handleDownload = async (file: any) => {
@@ -52,6 +75,7 @@ const Favorites = () => {
       a.href = url;
       a.download = file.name;
       a.click();
+      URL.revokeObjectURL(url);
 
       await supabase.from("file_access_logs").insert({
         file_id: file.id,
@@ -82,6 +106,10 @@ const Favorites = () => {
     loadData();
   };
 
+  const handleShare = (file: any) => {
+    setShareFile(file);
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -95,17 +123,18 @@ const Favorites = () => {
         ) : (
           <FolderGrid
             folders={[]}
-        files={files}
-        onFolderClick={() => {}}
-        onFileClick={handleFileClick}
-        onDownload={handleDownload}
-        onDelete={handleDelete}
-        onToggleFavorite={handleToggleFavorite}
-        onMoveFile={() => {}}
-        allFolders={[]}
-        isAdmin={isAdmin}
-        favorites={favorites}
-      />
+            files={files}
+            onFolderClick={() => {}}
+            onFileClick={handleFileClick}
+            onDownload={handleDownload}
+            onDelete={handleDelete}
+            onToggleFavorite={handleToggleFavorite}
+            onMoveFile={() => {}}
+            onShare={handleShare}
+            allFolders={[]}
+            isAdmin={isAdmin}
+            favorites={favorites}
+          />
         )}
 
         {!loading && files.length === 0 && (
@@ -114,6 +143,19 @@ const Favorites = () => {
           </div>
         )}
       </div>
+
+      <FilePreviewDialog
+        file={previewFile}
+        open={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        onDownload={() => previewFile && handleDownload(previewFile)}
+      />
+
+      <FileShareDialog
+        file={shareFile}
+        open={!!shareFile}
+        onClose={() => setShareFile(null)}
+      />
     </Layout>
   );
 };

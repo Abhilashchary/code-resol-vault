@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useContentModeration } from "@/hooks/useContentModeration";
 import Layout from "@/components/Layout";
 import FolderGrid from "@/components/FolderGrid";
 import FileUpload from "@/components/FileUpload";
@@ -317,6 +318,105 @@ const Dashboard = () => {
     }
   };
 
+  const handleRenameFile = async (fileId: string, newName: string) => {
+    try {
+      const { error } = await supabase
+        .from("files")
+        .update({ name: newName })
+        .eq("id", fileId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "File renamed successfully",
+      });
+
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: "Error renaming file",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRenameFolder = async (folderId: string, newName: string) => {
+    try {
+      const { error } = await supabase
+        .from("folders")
+        .update({ name: newName })
+        .eq("id", folderId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Folder renamed successfully",
+      });
+
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: "Error renaming folder",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCopyFile = async (file: any) => {
+    try {
+      // Download the original file
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("files")
+        .download(file.storage_path);
+
+      if (downloadError) throw downloadError;
+
+      // Generate new storage path
+      const fileExt = file.name.split(".").pop();
+      const newFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const newFilePath = folderId
+        ? `${folderId}/${newFileName}`
+        : `root/${newFileName}`;
+
+      // Upload copy
+      const { error: uploadError } = await supabase.storage
+        .from("files")
+        .upload(newFilePath, fileData);
+
+      if (uploadError) throw uploadError;
+
+      // Create new file record
+      const copyName = `${file.name.replace(/\.[^/.]+$/, "")} (copy).${fileExt}`;
+      const { error: dbError } = await supabase.from("files").insert({
+        folder_id: folderId || null,
+        name: copyName,
+        storage_path: newFilePath,
+        file_type: file.file_type,
+        file_size: file.file_size,
+        uploaded_by: user?.id,
+      });
+
+      if (dbError) throw dbError;
+
+      toast({
+        title: "Success",
+        description: "File copied successfully",
+      });
+
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: "Error copying file",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleShare = (file: any) => {
     setShareFile(file);
   };
@@ -554,6 +654,9 @@ const Dashboard = () => {
             onDelete={handleDelete}
             onToggleFavorite={handleToggleFavorite}
             onMoveFile={handleMoveFile}
+            onRenameFile={handleRenameFile}
+            onRenameFolder={handleRenameFolder}
+            onCopyFile={handleCopyFile}
             onShare={handleShare}
             allFolders={folders}
             currentFolderId={folderId}

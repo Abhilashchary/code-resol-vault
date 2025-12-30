@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_sessions: {
+        Row: {
+          created_at: string | null
+          expires_at: string
+          id: string
+          session_token: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          session_token: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          session_token?: string
+        }
+        Relationships: []
+      }
       favorites: {
         Row: {
           created_at: string
@@ -177,6 +198,7 @@ export type Database = {
           last_accessed_at: string | null
           name: string
           storage_path: string
+          submitted_by: string | null
           updated_at: string
           uploaded_by: string | null
         }
@@ -190,6 +212,7 @@ export type Database = {
           last_accessed_at?: string | null
           name: string
           storage_path: string
+          submitted_by?: string | null
           updated_at?: string
           uploaded_by?: string | null
         }
@@ -203,6 +226,7 @@ export type Database = {
           last_accessed_at?: string | null
           name?: string
           storage_path?: string
+          submitted_by?: string | null
           updated_at?: string
           uploaded_by?: string | null
         }
@@ -231,6 +255,7 @@ export type Database = {
           name: string
           parent_id: string | null
           path: string[]
+          submitted_by: string | null
           updated_at: string
         }
         Insert: {
@@ -240,6 +265,7 @@ export type Database = {
           name: string
           parent_id?: string | null
           path?: string[]
+          submitted_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -249,6 +275,7 @@ export type Database = {
           name?: string
           parent_id?: string | null
           path?: string[]
+          submitted_by?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -262,6 +289,83 @@ export type Database = {
           {
             foreignKeyName: "folders_parent_id_fkey"
             columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guest_users: {
+        Row: {
+          created_at: string | null
+          id: string
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      pending_actions: {
+        Row: {
+          action_type: string
+          created_at: string | null
+          file_size: number | null
+          file_type: string | null
+          folder_id: string | null
+          id: string
+          item_id: string | null
+          item_type: string
+          original_filename: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+          submitted_by: string
+          temp_storage_path: string | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          folder_id?: string | null
+          id?: string
+          item_id?: string | null
+          item_type: string
+          original_filename?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          submitted_by: string
+          temp_storage_path?: string | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          folder_id?: string | null
+          id?: string
+          item_id?: string | null
+          item_type?: string
+          original_filename?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          submitted_by?: string
+          temp_storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_actions_folder_id_fkey"
+            columns: ["folder_id"]
             isOneToOne: false
             referencedRelation: "folders"
             referencedColumns: ["id"]

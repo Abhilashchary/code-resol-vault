@@ -1,4 +1,4 @@
-import { Folder, File, MoreVertical, Download, Trash2, Star, Eye, User, FolderOpen, Share2 } from "lucide-react";
+import { Folder, File, MoreVertical, Download, Trash2, Star, Eye, User, FolderOpen, Share2, Edit, Copy, Scissors, Move } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,9 +23,14 @@ interface FolderGridProps {
   onToggleFavorite: (fileId: string) => void;
   onMoveFile?: (fileId: string, targetFolderId: string | null) => void;
   onShare?: (file: any) => void;
+  onRename?: (type: "folder" | "file", id: string, currentName: string) => void;
+  onCopy?: (type: "folder" | "file", item: any) => void;
+  onCut?: (type: "folder" | "file", item: any) => void;
+  onMoveFolder?: (folderId: string) => void;
   allFolders?: any[];
   currentFolderId?: string | null;
   isAdmin: boolean;
+  username?: string;
   favorites: Set<string>;
   viewMode?: "grid" | "list";
   selectedFiles?: Set<string>;
@@ -43,9 +48,14 @@ const FolderGrid = ({
   onToggleFavorite,
   onMoveFile,
   onShare,
+  onRename,
+  onCopy,
+  onCut,
+  onMoveFolder,
   allFolders,
   currentFolderId,
   isAdmin,
+  username,
   favorites,
   viewMode = "grid",
   selectedFiles = new Set(),
@@ -78,6 +88,205 @@ const FolderGrid = ({
     }
   };
 
+  const canModify = (item: any) => {
+    // Admin can modify anything, users can modify their own items
+    return isAdmin || item.submitted_by === username;
+  };
+
+  const renderFolderActions = (folder: any) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+        <Button variant="ghost" size="sm">
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        {onRename && canModify(folder) && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onRename("folder", folder.id, folder.name);
+            }}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Rename
+          </DropdownMenuItem>
+        )}
+        {onMoveFolder && canModify(folder) && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveFolder(folder.id);
+            }}
+          >
+            <Move className="mr-2 h-4 w-4" />
+            Move
+          </DropdownMenuItem>
+        )}
+        {onCopy && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopy("folder", folder);
+            }}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Copy
+          </DropdownMenuItem>
+        )}
+        {onCut && canModify(folder) && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onCut("folder", folder);
+            }}
+          >
+            <Scissors className="mr-2 h-4 w-4" />
+            Cut
+          </DropdownMenuItem>
+        )}
+        {(isAdmin || canModify(folder)) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete("folder", folder.id);
+              }}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isAdmin ? "Delete" : "Request Delete"}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const renderFileActions = (file: any) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+        <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(file.id);
+          }}
+        >
+          <Star
+            className={`mr-2 h-4 w-4 ${
+              favorites.has(file.id) ? "fill-yellow-400 text-yellow-400" : ""
+            }`}
+          />
+          {favorites.has(file.id) ? "Unfavorite" : "Favorite"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload(file);
+          }}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Download
+        </DropdownMenuItem>
+        {onShare && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onShare(file);
+            }}
+          >
+            <Share2 className="mr-2 h-4 w-4" />
+            Share
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        {onRename && canModify(file) && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onRename("file", file.id, file.name);
+            }}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Rename
+          </DropdownMenuItem>
+        )}
+        {onCopy && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopy("file", file);
+            }}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Copy
+          </DropdownMenuItem>
+        )}
+        {onCut && canModify(file) && (
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onCut("file", file);
+            }}
+          >
+            <Scissors className="mr-2 h-4 w-4" />
+            Cut
+          </DropdownMenuItem>
+        )}
+        {onMoveFile && allFolders && canModify(file) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Move to Folder</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveFile(file.id, null);
+              }}
+              disabled={!currentFolderId}
+            >
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Root Folder
+            </DropdownMenuItem>
+            {allFolders.slice(0, 5).map((folder) => (
+              <DropdownMenuItem
+                key={folder.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveFile(file.id, folder.id);
+                }}
+                disabled={currentFolderId === folder.id}
+              >
+                <Folder className="mr-2 h-4 w-4" />
+                {folder.name}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+        {(isAdmin || canModify(file)) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete("file", file.id);
+              }}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isAdmin ? "Delete" : "Request Delete"}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   if (viewMode === "list") {
     return (
       <div className="space-y-2">
@@ -93,38 +302,28 @@ const FolderGrid = ({
                   <Folder className="h-6 w-6 text-primary flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold truncate">{folder.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <Badge variant="secondary" className="text-xs">
                         {folder.files?.[0]?.count || 0} files
-                      </p>
-                      <span className="text-muted-foreground">•</span>
-                      <p className="text-xs text-muted-foreground">
+                      </Badge>
+                      {folder.subfolderCount !== undefined && (
+                        <Badge variant="outline" className="text-xs">
+                          {folder.subfolderCount} folders
+                        </Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground">
                         {new Date(folder.created_at).toLocaleDateString()}
-                      </p>
+                      </span>
+                      {folder.submitted_by && (
+                        <Badge variant="outline" className="text-xs">
+                          <User className="h-3 w-3 mr-1" />
+                          {folder.submitted_by}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
-                {isAdmin && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete("folder", folder.id);
-                        }}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                {renderFolderActions(folder)}
               </div>
             </CardContent>
           </Card>
@@ -162,10 +361,10 @@ const FolderGrid = ({
                         <Eye className="h-3 w-3 mr-1" />
                         {file.access_count}
                       </Badge>
-                      {file.uploader_profile?.full_name && (
+                      {file.submitted_by && (
                         <Badge variant="secondary" className="text-xs">
                           <User className="h-3 w-3 mr-1" />
-                          {file.uploader_profile.full_name}
+                          {file.submitted_by}
                         </Badge>
                       )}
                       <span className="text-xs text-muted-foreground">
@@ -174,92 +373,7 @@ const FolderGrid = ({
                     </div>
                   </div>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="sm">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(file.id);
-                      }}
-                    >
-                      <Star
-                        className={`mr-2 h-4 w-4 ${
-                          favorites.has(file.id) ? "fill-yellow-400 text-yellow-400" : ""
-                        }`}
-                      />
-                      {favorites.has(file.id) ? "Unfavorite" : "Favorite"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDownload(file);
-                      }}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </DropdownMenuItem>
-                    {onShare && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onShare(file);
-                        }}
-                      >
-                        <Share2 className="mr-2 h-4 w-4" />
-                        Share
-                      </DropdownMenuItem>
-                    )}
-                    {onMoveFile && allFolders && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Move to Folder</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onMoveFile(file.id, null);
-                          }}
-                          disabled={!currentFolderId}
-                        >
-                          <FolderOpen className="mr-2 h-4 w-4" />
-                          Root Folder
-                        </DropdownMenuItem>
-                        {allFolders.map((folder) => (
-                          <DropdownMenuItem
-                            key={folder.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onMoveFile(file.id, folder.id);
-                            }}
-                            disabled={currentFolderId === folder.id}
-                          >
-                            <Folder className="mr-2 h-4 w-4" />
-                            {folder.name}
-                          </DropdownMenuItem>
-                        ))}
-                      </>
-                    )}
-                    {isAdmin && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete("file", file.id);
-                          }}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {renderFileActions(file)}
               </div>
             </CardContent>
           </Card>
@@ -282,38 +396,24 @@ const FolderGrid = ({
                 <Folder className="h-8 w-8 text-primary flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold truncate">{folder.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <Badge variant="secondary" className="text-xs">
                       {folder.files?.[0]?.count || 0} files
-                    </p>
-                    <span className="text-muted-foreground">•</span>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(folder.created_at).toLocaleDateString()}
-                    </p>
+                    </Badge>
+                    {folder.subfolderCount !== undefined && folder.subfolderCount > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        {folder.subfolderCount} folders
+                      </Badge>
+                    )}
                   </div>
+                  {folder.submitted_by && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      by {folder.submitted_by}
+                    </p>
+                  )}
                 </div>
               </div>
-              {isAdmin && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="sm">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete("folder", folder.id);
-                      }}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              {renderFolderActions(folder)}
             </div>
           </CardContent>
         </Card>
@@ -348,107 +448,25 @@ const FolderGrid = ({
                   </p>
                 </div>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleFavorite(file.id);
-                    }}
-                  >
-                    <Star
-                      className={`mr-2 h-4 w-4 ${
-                        favorites.has(file.id) ? "fill-yellow-400 text-yellow-400" : ""
-                      }`}
-                    />
-                    {favorites.has(file.id) ? "Unfavorite" : "Favorite"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDownload(file);
-                    }}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download
-                  </DropdownMenuItem>
-                  {onShare && (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onShare(file);
-                      }}
-                    >
-                      <Share2 className="mr-2 h-4 w-4" />
-                      Share
-                    </DropdownMenuItem>
-                  )}
-                  {onMoveFile && allFolders && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel>Move to Folder</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onMoveFile(file.id, null);
-                        }}
-                        disabled={!currentFolderId}
-                      >
-                        <FolderOpen className="mr-2 h-4 w-4" />
-                        Root Folder
-                      </DropdownMenuItem>
-                      {allFolders.map((folder) => (
-                        <DropdownMenuItem
-                          key={folder.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onMoveFile(file.id, folder.id);
-                          }}
-                          disabled={currentFolderId === folder.id}
-                        >
-                          <Folder className="mr-2 h-4 w-4" />
-                          {folder.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </>
-                  )}
-                  {isAdmin && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete("file", file.id);
-                        }}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {renderFileActions(file)}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="text-xs">
                 <Eye className="h-3 w-3 mr-1" />
                 {file.access_count} views
               </Badge>
-              {file.uploader_profile?.full_name && (
+              {favorites.has(file.id) && (
                 <Badge variant="secondary" className="text-xs">
-                  <User className="h-3 w-3 mr-1" />
-                  {file.uploader_profile.full_name}
+                  <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+                  Favorite
                 </Badge>
               )}
-              <span className="text-xs text-muted-foreground ml-auto">
-                {new Date(file.created_at).toLocaleDateString()}
-              </span>
+              {file.submitted_by && (
+                <Badge variant="outline" className="text-xs">
+                  <User className="h-3 w-3 mr-1" />
+                  {file.submitted_by}
+                </Badge>
+              )}
             </div>
           </CardContent>
         </Card>

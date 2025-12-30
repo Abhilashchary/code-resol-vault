@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -16,6 +16,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 import {
   FolderOpen,
   Clock,
@@ -33,7 +34,7 @@ interface LayoutProps {
 }
 
 const Layout = ({ children }: LayoutProps) => {
-  const { user, isAdmin, signOut } = useAuth();
+  const { username, isAdmin, logout, logoutAdmin } = useGuestAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -101,6 +102,13 @@ const Layout = ({ children }: LayoutProps) => {
           </div>
 
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Badge variant="destructive" className="hidden sm:flex">
+                <Shield className="h-3 w-3 mr-1" />
+                Admin
+              </Badge>
+            )}
+            
             {/* Quick upload button for mobile */}
             <Link to="/" className="md:hidden">
               <Button variant="ghost" size="icon">
@@ -122,14 +130,23 @@ const Layout = ({ children }: LayoutProps) => {
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium truncate max-w-[200px]">{user?.email}</p>
+                    <p className="text-sm font-medium truncate max-w-[200px]">{username}</p>
                     {isAdmin && (
-                      <p className="text-xs text-muted-foreground">Administrator</p>
+                      <p className="text-xs text-destructive font-semibold">Administrator</p>
                     )}
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={signOut}>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuItem onClick={logoutAdmin}>
+                      <Shield className="mr-2 h-4 w-4" />
+                      <span>Exit Admin Mode</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem onClick={logout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign out</span>
                 </DropdownMenuItem>

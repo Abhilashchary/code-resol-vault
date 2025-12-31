@@ -31,7 +31,11 @@ interface PendingAction {
   created_at: string;
 }
 
-const PendingActionsPanel = () => {
+interface PendingActionsPanelProps {
+  onActionComplete?: () => void;
+}
+
+const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => {
   const { isAdmin, username } = useGuestAuth();
   const { toast } = useToast();
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
@@ -131,6 +135,7 @@ const PendingActionsPanel = () => {
       });
 
       loadPendingActions();
+      onActionComplete?.();
     } catch (error: any) {
       toast({
         title: "Error approving action",
@@ -163,6 +168,7 @@ const PendingActionsPanel = () => {
       });
 
       loadPendingActions();
+      onActionComplete?.();
     } catch (error: any) {
       toast({
         title: "Error rejecting action",

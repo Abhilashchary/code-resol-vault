@@ -21,7 +21,6 @@ import {
   FolderOpen,
   Clock,
   Star,
-  Tags,
   Shield,
   LogOut,
   User,
@@ -42,7 +41,6 @@ const Layout = ({ children }: LayoutProps) => {
     { icon: FolderOpen, label: "All Files", path: "/" },
     { icon: Clock, label: "Recent", path: "/recent" },
     { icon: Star, label: "Favorites", path: "/favorites" },
-    { icon: Tags, label: "Tags", path: "/tags" },
   ];
 
   if (isAdmin) {

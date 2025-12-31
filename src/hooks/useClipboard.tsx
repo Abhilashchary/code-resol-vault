@@ -10,8 +10,8 @@ interface ClipboardItem {
 
 interface ClipboardContextType {
   clipboardItem: ClipboardItem | null;
-  copy: (item: ClipboardItem) => void;
-  cut: (item: ClipboardItem) => void;
+  copy: (item: Omit<ClipboardItem, "operation">) => void;
+  cut: (item: Omit<ClipboardItem, "operation">) => void;
   clear: () => void;
   hasItem: boolean;
 }

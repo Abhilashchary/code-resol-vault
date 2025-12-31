@@ -10,7 +10,6 @@ import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import Recent from "./pages/Recent";
 import Favorites from "./pages/Favorites";
-import Tags from "./pages/Tags";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import SharePage from "./pages/SharePage";
@@ -71,7 +70,6 @@ const AppRoutes = () => (
     <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     <Route path="/recent" element={<ProtectedRoute><Recent /></ProtectedRoute>} />
     <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
-    <Route path="/tags" element={<ProtectedRoute><Tags /></ProtectedRoute>} />
     <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
     <Route path="/auth" element={<Navigate to="/entry" replace />} />
     <Route path="*" element={<NotFound />} />

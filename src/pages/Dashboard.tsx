@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useClipboard } from "@/hooks/useClipboard";
@@ -336,7 +336,9 @@ const Dashboard = () => {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
-                  <BreadcrumbLink href="/"><Home className="h-4 w-4" /></BreadcrumbLink>
+                  <BreadcrumbLink asChild>
+                    <Link to="/"><Home className="h-4 w-4" /></Link>
+                  </BreadcrumbLink>
                 </BreadcrumbItem>
                 {breadcrumb.map((folder, index) => (
                   <span key={folder.id} className="contents">
@@ -345,7 +347,9 @@ const Dashboard = () => {
                       {index === breadcrumb.length - 1 ? (
                         <BreadcrumbPage>{folder.name}</BreadcrumbPage>
                       ) : (
-                        <BreadcrumbLink href={`/?folder=${folder.id}`}>{folder.name}</BreadcrumbLink>
+                        <BreadcrumbLink asChild>
+                          <Link to={`/?folder=${folder.id}`}>{folder.name}</Link>
+                        </BreadcrumbLink>
                       )}
                     </BreadcrumbItem>
                   </span>

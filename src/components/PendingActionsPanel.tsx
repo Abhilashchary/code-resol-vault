@@ -48,15 +48,19 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
   const loadPendingActions = async () => {
     setLoading(true);
     try {
+      console.log("Loading pending actions...");
       const { data, error } = await supabase
         .from("pending_actions")
         .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
+      console.log("Pending actions data:", data, "error:", error);
+      
       if (error) throw error;
       setPendingActions(data || []);
     } catch (error: any) {
+      console.error("Error loading pending actions:", error);
       toast({
         title: "Error loading pending actions",
         description: error.message,
@@ -185,6 +189,8 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
+  // Show panel even for non-admin if there's data (for debugging), but actions will be hidden
+  // Actually, keep admin check but let's also add a reload button
   if (!isAdmin) {
     return null;
   }
@@ -192,15 +198,22 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-lg px-3 py-1">
-            {pendingActions.length}
-          </Badge>
-          Pending Approvals
-        </CardTitle>
-        <CardDescription>
-          Review and approve or reject user upload and delete requests
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-lg px-3 py-1">
+                {pendingActions.length}
+              </Badge>
+              Pending Approvals
+            </CardTitle>
+            <CardDescription>
+              Review and approve or reject user upload and delete requests
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadPendingActions} disabled={loading}>
+            {loading ? "Loading..." : "Refresh"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {loading ? (

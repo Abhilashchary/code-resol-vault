@@ -13,6 +13,7 @@ import BulkOperationsBar from "@/components/BulkOperationsBar";
 import RenameDialog from "@/components/RenameDialog";
 import FolderTreePicker from "@/components/FolderTreePicker";
 import ClipboardIndicator from "@/components/ClipboardIndicator";
+import UserPendingStatus from "@/components/UserPendingStatus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -331,6 +332,7 @@ const Dashboard = () => {
   return (
     <Layout>
       <div className="space-y-6">
+        <UserPendingStatus />
         <div className="flex items-center justify-between">
           <div className="space-y-2 flex-1">
             <Breadcrumb>

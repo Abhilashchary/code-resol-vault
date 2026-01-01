@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,7 +35,17 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
   const { username, isAdmin, logout, logoutAdmin } = useGuestAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/entry", { replace: true });
+  };
+
+  const handleLogoutAdmin = () => {
+    logoutAdmin();
+  };
 
   const navItems = [
     { icon: FolderOpen, label: "All Files", path: "/" },
@@ -137,14 +147,14 @@ const Layout = ({ children }: LayoutProps) => {
                 <DropdownMenuSeparator />
                 {isAdmin && (
                   <>
-                    <DropdownMenuItem onClick={logoutAdmin}>
+                    <DropdownMenuItem onClick={handleLogoutAdmin}>
                       <Shield className="mr-2 h-4 w-4" />
                       <span>Exit Admin Mode</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
                 )}
-                <DropdownMenuItem onClick={logout}>
+                <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign out</span>
                 </DropdownMenuItem>

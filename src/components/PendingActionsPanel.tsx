@@ -4,6 +4,7 @@ import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   Table,
@@ -13,7 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Check, X, Upload, Trash2, File, Folder, Eye } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Check, X, Upload, Trash2, File, Folder, Eye, RefreshCw, CheckCheck, XCircle } from "lucide-react";
 import { format } from "date-fns";
 
 interface PendingAction {
@@ -40,25 +47,31 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
   const { toast } = useToast();
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<string | null>(null);
+  const [previewName, setPreviewName] = useState<string>("");
+  const [processingBulk, setProcessingBulk] = useState(false);
 
   useEffect(() => {
-    loadPendingActions();
-  }, []);
+    if (isAdmin) {
+      loadPendingActions();
+    }
+  }, [isAdmin]);
 
   const loadPendingActions = async () => {
     setLoading(true);
     try {
-      console.log("Loading pending actions...");
       const { data, error } = await supabase
         .from("pending_actions")
         .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
-      console.log("Pending actions data:", data, "error:", error);
-      
       if (error) throw error;
       setPendingActions(data || []);
+      setSelectedIds(new Set());
     } catch (error: any) {
       console.error("Error loading pending actions:", error);
       toast({
@@ -68,6 +81,27 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePreview = async (action: PendingAction) => {
+    if (!action.temp_storage_path) return;
+
+    try {
+      const { data } = supabase.storage
+        .from("files")
+        .getPublicUrl(action.temp_storage_path);
+
+      setPreviewUrl(data.publicUrl);
+      setPreviewType(action.file_type);
+      setPreviewName(action.original_filename || "File Preview");
+      setPreviewOpen(true);
+    } catch (error: any) {
+      toast({
+        title: "Error loading preview",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -133,19 +167,10 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
         })
         .eq("id", action.id);
 
-      toast({
-        title: "Approved",
-        description: `${action.action_type} request approved`,
-      });
-
-      loadPendingActions();
-      onActionComplete?.();
+      return true;
     } catch (error: any) {
-      toast({
-        title: "Error approving action",
-        description: error.message,
-        variant: "destructive",
-      });
+      console.error("Error approving action:", error);
+      throw error;
     }
   };
 
@@ -166,11 +191,38 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
         })
         .eq("id", action.id);
 
+      return true;
+    } catch (error: any) {
+      console.error("Error rejecting action:", error);
+      throw error;
+    }
+  };
+
+  const handleSingleApprove = async (action: PendingAction) => {
+    try {
+      await handleApprove(action);
+      toast({
+        title: "Approved",
+        description: `${action.action_type} request approved`,
+      });
+      loadPendingActions();
+      onActionComplete?.();
+    } catch (error: any) {
+      toast({
+        title: "Error approving action",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSingleReject = async (action: PendingAction) => {
+    try {
+      await handleReject(action);
       toast({
         title: "Rejected",
         description: `${action.action_type} request rejected`,
       });
-
       loadPendingActions();
       onActionComplete?.();
     } catch (error: any) {
@@ -182,6 +234,80 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
     }
   };
 
+  const handleBulkApprove = async () => {
+    if (selectedIds.size === 0) return;
+
+    setProcessingBulk(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    const selectedActions = pendingActions.filter(a => selectedIds.has(a.id));
+
+    for (const action of selectedActions) {
+      try {
+        await handleApprove(action);
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setProcessingBulk(false);
+    toast({
+      title: "Bulk Approve Complete",
+      description: `${successCount} approved${failCount > 0 ? `, ${failCount} failed` : ""}`,
+    });
+
+    loadPendingActions();
+    onActionComplete?.();
+  };
+
+  const handleBulkReject = async () => {
+    if (selectedIds.size === 0) return;
+
+    setProcessingBulk(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    const selectedActions = pendingActions.filter(a => selectedIds.has(a.id));
+
+    for (const action of selectedActions) {
+      try {
+        await handleReject(action);
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setProcessingBulk(false);
+    toast({
+      title: "Bulk Reject Complete",
+      description: `${successCount} rejected${failCount > 0 ? `, ${failCount} failed` : ""}`,
+    });
+
+    loadPendingActions();
+    onActionComplete?.();
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === pendingActions.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pendingActions.map(a => a.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
   const formatFileSize = (bytes: number | null) => {
     if (!bytes) return "N/A";
     if (bytes < 1024) return bytes + " B";
@@ -189,115 +315,216 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
-  // Show panel even for non-admin if there's data (for debugging), but actions will be hidden
-  // Actually, keep admin check but let's also add a reload button
+  const isImage = (type: string | null) => type?.startsWith("image/");
+  const isPdf = (type: string | null) => type === "application/pdf";
+  const isVideo = (type: string | null) => type?.startsWith("video/");
+  const isAudio = (type: string | null) => type?.startsWith("audio/");
+
   if (!isAdmin) {
     return null;
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-lg px-3 py-1">
-                {pendingActions.length}
-              </Badge>
-              Pending Approvals
-            </CardTitle>
-            <CardDescription>
-              Review and approve or reject user upload and delete requests
-            </CardDescription>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Badge variant={pendingActions.length > 0 ? "destructive" : "secondary"} className="text-lg px-3 py-1">
+                  {pendingActions.length}
+                </Badge>
+                Pending Approvals
+              </CardTitle>
+              <CardDescription>
+                Review and approve or reject user upload and delete requests
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              {selectedIds.size > 0 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkApprove}
+                    disabled={processingBulk}
+                    className="text-green-600 border-green-600 hover:bg-green-50"
+                  >
+                    <CheckCheck className="h-4 w-4 mr-1" />
+                    Approve ({selectedIds.size})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkReject}
+                    disabled={processingBulk}
+                    className="text-red-600 border-red-600 hover:bg-red-50"
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Reject ({selectedIds.size})
+                  </Button>
+                </>
+              )}
+              <Button variant="outline" size="sm" onClick={loadPendingActions} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
-          <Button variant="outline" size="sm" onClick={loadPendingActions} disabled={loading}>
-            {loading ? "Loading..." : "Refresh"}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : pendingActions.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">
-            No pending actions to review
-          </p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead>Submitted By</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Details</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pendingActions.map((action) => (
-                <TableRow key={action.id}>
-                  <TableCell>
-                    <Badge
-                      variant={action.action_type === "upload" ? "default" : "destructive"}
-                    >
-                      {action.action_type === "upload" ? (
-                        <Upload className="h-3 w-3 mr-1" />
-                      ) : (
-                        <Trash2 className="h-3 w-3 mr-1" />
-                      )}
-                      {action.action_type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {action.item_type === "file" ? (
-                        <File className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <Folder className="h-4 w-4 text-primary" />
-                      )}
-                      <span className="truncate max-w-[200px]">
-                        {action.original_filename || action.item_id?.slice(0, 8)}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{action.submitted_by}</TableCell>
-                  <TableCell>
-                    {format(new Date(action.created_at), "MMM d, HH:mm")}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {action.file_size ? formatFileSize(action.file_size) : "-"}
-                    {action.file_type && ` • ${action.file_type}`}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleApprove(action)}
-                      >
-                        <Check className="h-4 w-4 mr-1" />
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleReject(action)}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Reject
-                      </Button>
-                    </div>
-                  </TableCell>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : pendingActions.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              No pending actions to review
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={selectedIds.size === pendingActions.length && pendingActions.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Submitted By</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Details</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+              </TableHeader>
+              <TableBody>
+                {pendingActions.map((action) => (
+                  <TableRow key={action.id} className={selectedIds.has(action.id) ? "bg-muted/50" : ""}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(action.id)}
+                        onCheckedChange={() => toggleSelect(action.id)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={action.action_type === "upload" ? "default" : "destructive"}
+                      >
+                        {action.action_type === "upload" ? (
+                          <Upload className="h-3 w-3 mr-1" />
+                        ) : (
+                          <Trash2 className="h-3 w-3 mr-1" />
+                        )}
+                        {action.action_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {action.item_type === "file" ? (
+                          <File className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Folder className="h-4 w-4 text-primary" />
+                        )}
+                        <span className="truncate max-w-[200px]">
+                          {action.original_filename || action.item_id?.slice(0, 8)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{action.submitted_by}</TableCell>
+                    <TableCell>
+                      {format(new Date(action.created_at), "MMM d, HH:mm")}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {action.file_size ? formatFileSize(action.file_size) : "-"}
+                      {action.file_type && ` • ${action.file_type.split("/")[1] || action.file_type}`}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {action.action_type === "upload" && action.temp_storage_path && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handlePreview(action)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSingleApprove(action)}
+                          className="text-green-600 border-green-600 hover:bg-green-50"
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSingleReject(action)}
+                          className="text-red-600 border-red-600 hover:bg-red-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>{previewName}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[70vh] flex items-center justify-center">
+            {previewUrl && isImage(previewType) && (
+              <img
+                src={previewUrl}
+                alt={previewName}
+                className="max-w-full max-h-[60vh] object-contain"
+              />
+            )}
+            {previewUrl && isPdf(previewType) && (
+              <iframe
+                src={previewUrl}
+                className="w-full h-[60vh]"
+                title={previewName}
+              />
+            )}
+            {previewUrl && isVideo(previewType) && (
+              <video
+                src={previewUrl}
+                controls
+                className="max-w-full max-h-[60vh]"
+              />
+            )}
+            {previewUrl && isAudio(previewType) && (
+              <audio src={previewUrl} controls className="w-full" />
+            )}
+            {previewUrl && !isImage(previewType) && !isPdf(previewType) && !isVideo(previewType) && !isAudio(previewType) && (
+              <div className="text-center py-8">
+                <File className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">Preview not available for this file type</p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => window.open(previewUrl, "_blank")}
+                >
+                  Open in New Tab
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

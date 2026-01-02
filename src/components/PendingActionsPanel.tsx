@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, X, Upload, Trash2, File, Folder, Eye, RefreshCw, CheckCheck, XCircle } from "lucide-react";
+import { Check, X, Upload, Trash2, File, Folder, Eye, RefreshCw, CheckCheck, XCircle, Shield, AlertTriangle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface PendingAction {
@@ -38,6 +38,13 @@ interface PendingAction {
   created_at: string;
 }
 
+interface ModerationResult {
+  safe: boolean;
+  level: 'safe' | 'low' | 'medium' | 'high';
+  issues: string[];
+  details: string;
+}
+
 interface PendingActionsPanelProps {
   onActionComplete?: () => void;
 }
@@ -53,8 +60,11 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
   const [previewType, setPreviewType] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState<string>("");
   const [processingBulk, setProcessingBulk] = useState(false);
+  const [moderationResults, setModerationResults] = useState<Record<string, ModerationResult>>({});
+  const [moderating, setModerating] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    console.log("PendingActionsPanel mounted, isAdmin:", isAdmin, "username:", username);
     if (isAdmin) {
       loadPendingActions();
     }
@@ -62,12 +72,15 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
 
   const loadPendingActions = async () => {
     setLoading(true);
+    console.log("Loading pending actions...");
     try {
       const { data, error } = await supabase
         .from("pending_actions")
         .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
+
+      console.log("Pending actions loaded:", data, "Error:", error);
 
       if (error) throw error;
       setPendingActions(data || []);
@@ -81,6 +94,53 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runModeration = async (action: PendingAction) => {
+    if (!action.temp_storage_path || action.action_type !== "upload") return;
+
+    setModerating(prev => new Set([...prev, action.id]));
+
+    try {
+      const { data: urlData } = supabase.storage
+        .from("files")
+        .getPublicUrl(action.temp_storage_path);
+
+      const response = await supabase.functions.invoke('moderate-content', {
+        body: {
+          fileName: action.original_filename,
+          fileType: action.file_type,
+          fileUrl: urlData.publicUrl,
+        },
+      });
+
+      if (response.error) throw response.error;
+
+      const result: ModerationResult = response.data;
+      setModerationResults(prev => ({
+        ...prev,
+        [action.id]: result,
+      }));
+
+      toast({
+        title: result.safe ? "Content Safe" : "Content Flagged",
+        description: result.details,
+        variant: result.safe ? "default" : "destructive",
+      });
+    } catch (error: any) {
+      console.error("Moderation error:", error);
+      toast({
+        title: "Moderation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setModerating(prev => {
+        const next = new Set(prev);
+        next.delete(action.id);
+        return next;
+      });
     }
   };
 
@@ -202,8 +262,8 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
     try {
       await handleApprove(action);
       toast({
-        title: "Approved",
-        description: `${action.action_type} request approved`,
+        title: "✓ Approved",
+        description: `${action.original_filename || action.action_type} has been approved`,
       });
       loadPendingActions();
       onActionComplete?.();
@@ -220,8 +280,8 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
     try {
       await handleReject(action);
       toast({
-        title: "Rejected",
-        description: `${action.action_type} request rejected`,
+        title: "✗ Rejected",
+        description: `${action.original_filename || action.action_type} has been rejected`,
       });
       loadPendingActions();
       onActionComplete?.();
@@ -254,8 +314,8 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
 
     setProcessingBulk(false);
     toast({
-      title: "Bulk Approve Complete",
-      description: `${successCount} approved${failCount > 0 ? `, ${failCount} failed` : ""}`,
+      title: "✓ Bulk Approve Complete",
+      description: `${successCount} items approved${failCount > 0 ? `, ${failCount} failed` : ""}`,
     });
 
     loadPendingActions();
@@ -282,8 +342,8 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
 
     setProcessingBulk(false);
     toast({
-      title: "Bulk Reject Complete",
-      description: `${successCount} rejected${failCount > 0 ? `, ${failCount} failed` : ""}`,
+      title: "✗ Bulk Reject Complete",
+      description: `${successCount} items rejected${failCount > 0 ? `, ${failCount} failed` : ""}`,
     });
 
     loadPendingActions();
@@ -319,6 +379,29 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
   const isPdf = (type: string | null) => type === "application/pdf";
   const isVideo = (type: string | null) => type?.startsWith("video/");
   const isAudio = (type: string | null) => type?.startsWith("audio/");
+
+  const getModerationBadge = (actionId: string) => {
+    const result = moderationResults[actionId];
+    if (!result) return null;
+
+    const levelColors = {
+      safe: "bg-green-100 text-green-800",
+      low: "bg-yellow-100 text-yellow-800",
+      medium: "bg-orange-100 text-orange-800",
+      high: "bg-red-100 text-red-800",
+    };
+
+    return (
+      <Badge className={`${levelColors[result.level]} text-xs`}>
+        {result.level === "safe" ? (
+          <Shield className="h-3 w-3 mr-1" />
+        ) : (
+          <AlertTriangle className="h-3 w-3 mr-1" />
+        )}
+        {result.level}
+      </Badge>
+    );
+  };
 
   if (!isAdmin) {
     return null;
@@ -396,6 +479,7 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
                   <TableHead>Submitted By</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Details</TableHead>
+                  <TableHead>AI Check</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -439,6 +523,26 @@ const PendingActionsPanel = ({ onActionComplete }: PendingActionsPanelProps) => 
                     <TableCell className="text-muted-foreground text-sm">
                       {action.file_size ? formatFileSize(action.file_size) : "-"}
                       {action.file_type && ` • ${action.file_type.split("/")[1] || action.file_type}`}
+                    </TableCell>
+                    <TableCell>
+                      {getModerationBadge(action.id) || (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => runModeration(action)}
+                          disabled={moderating.has(action.id) || action.action_type !== "upload"}
+                          className="text-blue-600"
+                        >
+                          {moderating.has(action.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Shield className="h-4 w-4 mr-1" />
+                              Scan
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">

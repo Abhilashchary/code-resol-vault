@@ -1,6 +1,7 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useGuestAuth } from "@/hooks/useGuestAuth";
+import { useGuestAuth } from "@/contexts/GuestAuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -37,6 +38,45 @@ const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Fetch pending actions count for admin
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const fetchPendingCount = async () => {
+      const { count, error } = await supabase
+        .from("pending_actions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+
+      if (!error && count !== null) {
+        setPendingCount(count);
+      }
+    };
+
+    fetchPendingCount();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel("pending_actions_count")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "pending_actions",
+        },
+        () => {
+          fetchPendingCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAdmin]);
 
   const handleLogout = () => {
     logout();
@@ -47,14 +87,14 @@ const Layout = ({ children }: LayoutProps) => {
     logoutAdmin();
   };
 
-  const navItems = [
+  const navItems: { icon: typeof FolderOpen; label: string; path: string; badge?: number }[] = [
     { icon: FolderOpen, label: "All Files", path: "/" },
     { icon: Clock, label: "Recent", path: "/recent" },
     { icon: Star, label: "Favorites", path: "/favorites" },
   ];
 
   if (isAdmin) {
-    navItems.push({ icon: Shield, label: "Admin Panel", path: "/admin" });
+    navItems.push({ icon: Shield, label: "Admin Panel", path: "/admin", badge: pendingCount });
   }
 
   const NavContent = () => (
@@ -63,6 +103,7 @@ const Layout = ({ children }: LayoutProps) => {
         const Icon = item.icon;
         const isActive = location.pathname === item.path || 
           (item.path === "/" && location.pathname.startsWith("/?"));
+        const badge = item.badge ?? 0;
         return (
           <Link 
             key={item.path} 
@@ -75,6 +116,11 @@ const Layout = ({ children }: LayoutProps) => {
             >
               <Icon className="mr-2 h-4 w-4" />
               {item.label}
+              {badge > 0 && (
+                <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0.5 min-w-[20px] h-5">
+                  {badge}
+                </Badge>
+              )}
             </Button>
           </Link>
         );

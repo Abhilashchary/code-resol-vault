@@ -16,7 +16,7 @@ const AdminLogin = () => {
 
   useEffect(() => {
     if (!loading && isAdmin) {
-      navigate("/");
+      navigate("/admin");
     }
   }, [isAdmin, loading, navigate]);
 
@@ -44,7 +44,7 @@ const AdminLogin = () => {
         title: "Welcome Admin!",
         description: "You now have full access to the platform",
       });
-      navigate("/");
+      navigate("/admin");
     } else {
       toast({
         title: "Access Denied",

@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useGuestAuth } from "@/hooks/useGuestAuth";
+import { GuestAuthProvider, useGuestAuth } from "@/contexts/GuestAuthContext";
 import { ClipboardProvider } from "@/hooks/useClipboard";
 import Entry from "./pages/Entry";
 import AdminLogin from "./pages/AdminLogin";
@@ -79,13 +79,15 @@ const AppRoutes = () => (
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <ClipboardProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </ClipboardProvider>
+      <GuestAuthProvider>
+        <ClipboardProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </ClipboardProvider>
+      </GuestAuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

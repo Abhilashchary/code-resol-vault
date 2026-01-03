@@ -91,7 +91,7 @@ const Entry = () => {
               <FolderOpen className="h-10 w-10 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">CODE RESOL</CardTitle>
+          <CardTitle className="text-2xl font-bold">ResolGate</CardTitle>
           <CardDescription>
             Enter your username to access the file manager
           </CardDescription>

@@ -105,8 +105,8 @@ const Auth = () => {
               <FolderOpen className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl">CODE RESOL</CardTitle>
-          <CardDescription>Global File Management Platform</CardDescription>
+          <CardTitle className="text-2xl">ResolGate</CardTitle>
+          <CardDescription>Secure File Management Platform</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2 mb-6">

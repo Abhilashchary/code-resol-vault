@@ -145,14 +145,14 @@ const Layout = ({ children }: LayoutProps) => {
               <SheetContent side="left" className="w-64 p-4">
                 <div className="flex items-center gap-2 mb-6">
                   <FolderOpen className="h-6 w-6 text-primary" />
-                  <span className="text-xl font-bold">CODE RESOL</span>
+                  <span className="text-xl font-bold">ResolGate</span>
                 </div>
                 <NavContent />
               </SheetContent>
             </Sheet>
             
             <FolderOpen className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold hidden sm:inline">CODE RESOL</span>
+            <span className="text-xl font-bold hidden sm:inline">ResolGate</span>
           </div>
 
           <div className="flex items-center gap-2">

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, X } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { useGuestAuth } from "@/hooks/useGuestAuth";
 
 interface FileUploadProps {
   folderId?: string;
@@ -12,7 +12,7 @@ interface FileUploadProps {
 }
 
 const FileUpload = ({ folderId, onUploadComplete }: FileUploadProps) => {
-  const { user } = useAuth();
+  const { username, isAdmin } = useGuestAuth();
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -30,48 +30,95 @@ const FileUpload = ({ folderId, onUploadComplete }: FileUploadProps) => {
   };
 
   const handleUpload = async () => {
-    if (!user || selectedFiles.length === 0) return;
+    if (!username || selectedFiles.length === 0) return;
 
     setUploading(true);
     setProgress(0);
 
     try {
       const totalFiles = selectedFiles.length;
+      let successCount = 0;
+      let pendingCount = 0;
+      let failCount = 0;
       
       for (let i = 0; i < totalFiles; i++) {
         const file = selectedFiles[i];
         const fileExt = file.name.split(".").pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = folderId
-          ? `${folderId}/${fileName}`
-          : `root/${fileName}`;
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        
+        try {
+          if (isAdmin) {
+            // Admin uploads go directly
+            const filePath = folderId
+              ? `${folderId}/${fileName}`
+              : `root/${fileName}`;
 
-        // Upload to storage
-        const { error: uploadError } = await supabase.storage
-          .from("files")
-          .upload(filePath, file);
+            const { error: uploadError } = await supabase.storage
+              .from("files")
+              .upload(filePath, file);
 
-        if (uploadError) throw uploadError;
+            if (uploadError) throw uploadError;
 
-        // Insert file metadata
-        const { error: dbError } = await supabase.from("files").insert({
-          folder_id: folderId || null,
-          name: file.name,
-          storage_path: filePath,
-          file_type: file.type || "application/octet-stream",
-          file_size: file.size,
-          uploaded_by: user.id,
-        });
+            const { error: dbError } = await supabase.from("files").insert({
+              folder_id: folderId || null,
+              name: file.name,
+              storage_path: filePath,
+              file_type: file.type || "application/octet-stream",
+              file_size: file.size,
+              submitted_by: username,
+            });
 
-        if (dbError) throw dbError;
+            if (dbError) throw dbError;
+            successCount++;
+          } else {
+            // User uploads go to pending
+            const pendingPath = `pending/${username}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from("files")
+              .upload(pendingPath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { error: dbError } = await supabase.from("pending_actions").insert({
+              action_type: "upload",
+              item_type: "file",
+              temp_storage_path: pendingPath,
+              original_filename: file.name,
+              file_type: file.type || "application/octet-stream",
+              file_size: file.size,
+              folder_id: folderId || null,
+              submitted_by: username,
+            });
+
+            if (dbError) throw dbError;
+            pendingCount++;
+          }
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+          failCount++;
+        }
 
         setProgress(((i + 1) / totalFiles) * 100);
       }
 
-      toast({
-        title: "Success",
-        description: `${totalFiles} file(s) uploaded successfully!`,
-      });
+      if (isAdmin && successCount > 0) {
+        toast({
+          title: "Upload Complete",
+          description: `${successCount} file(s) uploaded successfully${failCount > 0 ? `, ${failCount} failed` : ""}`,
+        });
+      } else if (!isAdmin && pendingCount > 0) {
+        toast({
+          title: "Upload Submitted for Approval",
+          description: `${pendingCount} file(s) submitted for admin approval${failCount > 0 ? `, ${failCount} failed` : ""}`,
+        });
+      } else if (failCount > 0) {
+        toast({
+          title: "Upload Failed",
+          description: "No files were uploaded successfully",
+          variant: "destructive",
+        });
+      }
 
       setSelectedFiles([]);
       if (fileInputRef.current) {
@@ -88,6 +135,12 @@ const FileUpload = ({ folderId, onUploadComplete }: FileUploadProps) => {
       setUploading(false);
       setProgress(0);
     }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1024 / 1024).toFixed(1) + " MB";
   };
 
   return (
@@ -111,10 +164,16 @@ const FileUpload = ({ folderId, onUploadComplete }: FileUploadProps) => {
         </Button>
         {selectedFiles.length > 0 && (
           <Button onClick={handleUpload} disabled={uploading}>
-            Upload {selectedFiles.length} file(s)
+            {isAdmin ? `Upload ${selectedFiles.length} file(s)` : `Submit ${selectedFiles.length} file(s)`}
           </Button>
         )}
       </div>
+
+      {!isAdmin && selectedFiles.length > 0 && (
+        <p className="text-xs text-amber-600">
+          Uploads will require admin approval
+        </p>
+      )}
 
       {selectedFiles.length > 0 && (
         <div className="space-y-2">
@@ -126,7 +185,7 @@ const FileUpload = ({ folderId, onUploadComplete }: FileUploadProps) => {
               <div className="flex-1 truncate">
                 <p className="text-sm font-medium truncate">{file.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                  {formatFileSize(file.size)}
                 </p>
               </div>
               <Button

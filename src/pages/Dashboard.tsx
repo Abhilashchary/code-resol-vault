@@ -49,6 +49,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const folderId = searchParams.get("folder");
+  const [guestUserId, setGuestUserId] = useState<string | null>(null);
 
   const [folders, setFolders] = useState<any[]>([]);
   const [files, setFiles] = useState<any[]>([]);
@@ -79,16 +80,48 @@ const Dashboard = () => {
     folderId: string;
   } | null>(null);
 
+  const ensureGuestUserId = async (): Promise<string | null> => {
+    if (!username) return null;
+
+    const { data, error } = await supabase
+      .from("guest_users")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (error) return null;
+    if (data?.id) return data.id as string;
+
+    const { error: upsertError } = await supabase
+      .from("guest_users")
+      .upsert({ username }, { onConflict: "username" });
+
+    if (upsertError) return null;
+
+    const { data: afterUpsert } = await supabase
+      .from("guest_users")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    return (afterUpsert?.id as string | undefined) ?? null;
+  };
+
   useEffect(() => {
-    if (username) {
-      loadData();
-      loadFavorites();
-      if (folderId) {
-        loadBreadcrumb(folderId);
-      } else {
-        setBreadcrumb([]);
+    const init = async () => {
+      if (username) {
+        const userId = await ensureGuestUserId();
+        setGuestUserId(userId);
+        loadData();
+        loadFavorites(userId);
+        if (folderId) {
+          loadBreadcrumb(folderId);
+        } else {
+          setBreadcrumb([]);
+        }
       }
-    }
+    };
+    init();
   }, [username, folderId]);
 
   const loadData = async () => {
@@ -140,9 +173,18 @@ const Dashboard = () => {
     }
   };
 
-  const loadFavorites = async () => {
-    // For guest users, we'll skip favorites for now (they require user_id)
-    setFavorites(new Set());
+  const loadFavorites = async (userId: string | null) => {
+    if (!userId) {
+      setFavorites(new Set());
+      return;
+    }
+
+    const { data } = await supabase
+      .from("favorites")
+      .select("file_id")
+      .eq("user_id", userId);
+
+    setFavorites(new Set((data || []).map((f) => f.file_id)));
   };
 
   const loadBreadcrumb = async (currentFolderId: string) => {
@@ -243,8 +285,27 @@ const Dashboard = () => {
   };
 
   const handleToggleFavorite = async (fileId: string) => {
-    // Simplified for guest users
-    toast({ title: "Favorites", description: "Feature available for logged-in users" });
+    if (!guestUserId) {
+      toast({ title: "Please log in first", variant: "destructive" });
+      return;
+    }
+
+    const isFav = favorites.has(fileId);
+
+    if (isFav) {
+      await supabase
+        .from("favorites")
+        .delete()
+        .eq("file_id", fileId)
+        .eq("user_id", guestUserId);
+    } else {
+      await supabase.from("favorites").insert({
+        file_id: fileId,
+        user_id: guestUserId,
+      });
+    }
+
+    loadFavorites(guestUserId);
   };
 
   const handleMoveFile = async (fileId: string, targetFolderId: string | null) => {

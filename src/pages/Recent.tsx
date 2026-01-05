@@ -1,51 +1,123 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useGuestAuth } from "@/hooks/useGuestAuth";
 import Layout from "@/components/Layout";
 import FolderGrid from "@/components/FolderGrid";
 import FilePreviewDialog from "@/components/FilePreviewDialog";
 import FileShareDialog from "@/components/FileShareDialog";
 import { useToast } from "@/hooks/use-toast";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const Recent = () => {
-  const { user, isAdmin } = useAuth();
+  const { username, isAdmin } = useGuestAuth();
   const { toast } = useToast();
+
+  usePageMeta({
+    title: "Recent Files | ResolGate",
+    description:
+      "Browse recent files in ResolGate. Quickly preview, download, and manage recently accessed documents.",
+    canonicalPath: "/recent",
+  });
+
   const [files, setFiles] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [shareFile, setShareFile] = useState<any>(null);
+  const [guestUserId, setGuestUserId] = useState<string | null>(null);
+
+  const ensureGuestUserId = async (): Promise<string | null> => {
+    if (!username) return null;
+
+    // Entry page should have created this row, but we resolve it here as well.
+    const { data, error } = await supabase
+      .from("guest_users")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return null;
+    }
+
+    if (data?.id) return data.id as string;
+
+    const { error: upsertError } = await supabase
+      .from("guest_users")
+      .upsert({ username }, { onConflict: "username" });
+
+    if (upsertError) {
+      toast({ title: "Error", description: upsertError.message, variant: "destructive" });
+      return null;
+    }
+
+    const { data: afterUpsert } = await supabase
+      .from("guest_users")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    return (afterUpsert?.id as string | undefined) ?? null;
+  };
 
   useEffect(() => {
-    if (user) {
-      loadData();
-      loadFavorites();
-    }
-  }, [user]);
+    let cancelled = false;
+
+    const run = async () => {
+      if (!username) return;
+
+      const id = await ensureGuestUserId();
+      if (cancelled) return;
+
+      setGuestUserId(id);
+      await Promise.all([loadData(), loadFavorites(id)]);
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
 
   const loadData = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("files")
-      .select("*, uploader_profile:profiles!files_uploaded_by_fkey(full_name)")
-      .order("last_accessed_at", { ascending: false, nullsFirst: false })
-      .limit(50);
+    try {
+      const { data, error } = await supabase
+        .from("files")
+        .select("*")
+        .order("last_accessed_at", { ascending: false, nullsFirst: false })
+        .limit(50);
 
-    if (error) {
-      toast({ title: "Error", description: "Failed to load files", variant: "destructive" });
+      if (error) throw error;
+      setFiles(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load files",
+        variant: "destructive",
+      });
+      setFiles([]);
+    } finally {
+      setLoading(false);
     }
-    setFiles(data || []);
-    setLoading(false);
   };
 
-  const loadFavorites = async () => {
-    const { data } = await supabase
+  const loadFavorites = async (userId: string | null) => {
+    if (!userId) {
+      setFavorites(new Set());
+      return;
+    }
+
+    const { data, error } = await supabase
       .from("favorites")
       .select("file_id")
-      .eq("user_id", user?.id);
+      .eq("user_id", userId);
 
-    if (data) {
-      setFavorites(new Set(data.map((f) => f.file_id)));
+    if (!error) {
+      setFavorites(new Set((data || []).map((f) => f.file_id)));
     }
   };
 
@@ -53,7 +125,6 @@ const Recent = () => {
     const file = files.find((f) => f.id === fileId);
     if (!file) return;
 
-    // Update access count and log
     await Promise.all([
       supabase
         .from("files")
@@ -64,7 +135,7 @@ const Recent = () => {
         .eq("id", fileId),
       supabase.from("file_access_logs").insert({
         file_id: fileId,
-        user_id: user?.id,
+        user_id: guestUserId,
         action: "view",
       }),
     ]);
@@ -73,9 +144,14 @@ const Recent = () => {
   };
 
   const handleDownload = async (file: any) => {
-    const { data } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from("files")
       .download(file.storage_path);
+
+    if (error) {
+      toast({ title: "Download failed", description: error.message, variant: "destructive" });
+      return;
+    }
 
     if (data) {
       const url = URL.createObjectURL(data);
@@ -87,31 +163,41 @@ const Recent = () => {
 
       await supabase.from("file_access_logs").insert({
         file_id: file.id,
-        user_id: user?.id,
+        user_id: guestUserId,
         action: "download",
       });
     }
   };
 
-  const handleDelete = async (type: "folder" | "file", id: string) => {
+  const handleDelete = async (_type: "folder" | "file", id: string) => {
     if (!isAdmin) return;
 
     const file = files.find((f) => f.id === id);
-    if (file) {
-      await supabase.storage.from("files").remove([file.storage_path]);
-      await supabase.from("files").delete().eq("id", id);
-      toast({ title: "Success", description: "File deleted" });
-      loadData();
-    }
+    if (!file) return;
+
+    await supabase.storage.from("files").remove([file.storage_path]);
+    await supabase.from("files").delete().eq("id", id);
+    toast({ title: "Success", description: "File deleted" });
+    loadData();
   };
 
   const handleToggleFavorite = async (fileId: string) => {
+    if (!guestUserId) {
+      toast({
+        title: "Favorites",
+        description: "Please re-enter to enable favorites",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (favorites.has(fileId)) {
       await supabase
         .from("favorites")
         .delete()
         .eq("file_id", fileId)
-        .eq("user_id", user?.id);
+        .eq("user_id", guestUserId);
+
       setFavorites((prev) => {
         const next = new Set(prev);
         next.delete(fileId);
@@ -120,23 +206,22 @@ const Recent = () => {
     } else {
       await supabase.from("favorites").insert({
         file_id: fileId,
-        user_id: user?.id,
+        user_id: guestUserId,
       });
+
       setFavorites((prev) => new Set(prev).add(fileId));
     }
   };
 
-  const handleShare = (file: any) => {
-    setShareFile(file);
-  };
+  const handleShare = (file: any) => setShareFile(file);
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
+        <header>
           <h1 className="text-3xl font-bold">Recent Files</h1>
           <p className="text-muted-foreground">Files sorted by recent access</p>
-        </div>
+        </header>
 
         {loading ? (
           <div className="text-center py-12">Loading...</div>
@@ -158,9 +243,7 @@ const Recent = () => {
         )}
 
         {!loading && files.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            No recently accessed files
-          </div>
+          <div className="text-center py-12 text-muted-foreground">No recently accessed files</div>
         )}
       </div>
 
@@ -171,13 +254,10 @@ const Recent = () => {
         onDownload={() => previewFile && handleDownload(previewFile)}
       />
 
-      <FileShareDialog
-        file={shareFile}
-        open={!!shareFile}
-        onClose={() => setShareFile(null)}
-      />
+      <FileShareDialog file={shareFile} open={!!shareFile} onClose={() => setShareFile(null)} />
     </Layout>
   );
 };
 
 export default Recent;
+

@@ -62,6 +62,7 @@ const Dashboard = () => {
   const [sortBy, setSortBy] = useState("name");
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [shareFile, setShareFile] = useState<any>(null);
+  const [guestUserId, setGuestUserId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   
@@ -79,16 +80,70 @@ const Dashboard = () => {
     folderId: string;
   } | null>(null);
 
+  const ensureGuestUserId = async (): Promise<string | null> => {
+    if (!username) return null;
+
+    const { data, error } = await supabase
+      .from("guest_users")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return null;
+    }
+
+    if (data?.id) return data.id as string;
+
+    const { error: upsertError } = await supabase
+      .from("guest_users")
+      .upsert({ username }, { onConflict: "username" });
+
+    if (upsertError) {
+      toast({ title: "Error", description: upsertError.message, variant: "destructive" });
+      return null;
+    }
+
+    const { data: afterUpsert } = await supabase
+      .from("guest_users")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    return (afterUpsert?.id as string | undefined) ?? null;
+  };
+
   useEffect(() => {
-    if (username) {
-      loadData();
-      loadFavorites();
+    let cancelled = false;
+
+    const run = async () => {
+      if (!username) {
+        setGuestUserId(null);
+        setFavorites(new Set());
+        setLoading(false);
+        return;
+      }
+
+      const id = await ensureGuestUserId();
+      if (cancelled) return;
+
+      setGuestUserId(id);
+      await Promise.all([loadData(), loadFavorites(id)]);
+
       if (folderId) {
-        loadBreadcrumb(folderId);
+        await loadBreadcrumb(folderId);
       } else {
         setBreadcrumb([]);
       }
-    }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, folderId]);
 
   const loadData = async () => {
@@ -140,9 +195,20 @@ const Dashboard = () => {
     }
   };
 
-  const loadFavorites = async () => {
-    // For guest users, we'll skip favorites for now (they require user_id)
-    setFavorites(new Set());
+  const loadFavorites = async (userId: string | null) => {
+    if (!userId) {
+      setFavorites(new Set());
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("favorites")
+      .select("file_id")
+      .eq("user_id", userId);
+
+    if (!error) {
+      setFavorites(new Set((data || []).map((f) => f.file_id)));
+    }
   };
 
   const loadBreadcrumb = async (currentFolderId: string) => {
@@ -243,8 +309,47 @@ const Dashboard = () => {
   };
 
   const handleToggleFavorite = async (fileId: string) => {
-    // Simplified for guest users
-    toast({ title: "Favorites", description: "Feature available for logged-in users" });
+    if (!guestUserId) {
+      toast({
+        title: "Favorites",
+        description: "Please re-enter to enable favorites",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (favorites.has(fileId)) {
+        const { error } = await supabase
+          .from("favorites")
+          .delete()
+          .eq("file_id", fileId)
+          .eq("user_id", guestUserId);
+
+        if (error) throw error;
+
+        setFavorites((prev) => {
+          const next = new Set(prev);
+          next.delete(fileId);
+          return next;
+        });
+      } else {
+        const { error } = await supabase.from("favorites").insert({
+          file_id: fileId,
+          user_id: guestUserId,
+        });
+
+        if (error) throw error;
+
+        setFavorites((prev) => new Set(prev).add(fileId));
+      }
+    } catch (error: any) {
+      toast({
+        title: "Favorites error",
+        description: error.message || "Failed to update favorites",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleMoveFile = async (fileId: string, targetFolderId: string | null) => {

@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, Link, Check, Loader2 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 
 interface FileShareDialogProps {
   file: any;
@@ -21,7 +20,6 @@ interface FileShareDialogProps {
 }
 
 const FileShareDialog = ({ file, open, onClose }: FileShareDialogProps) => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
@@ -32,7 +30,14 @@ const FileShareDialog = ({ file, open, onClose }: FileShareDialogProps) => {
   const [downloadLimit, setDownloadLimit] = useState(10);
 
   const generateShareLink = async () => {
-    if (!user || !file) return;
+    if (!file) {
+      toast({
+        title: "Share",
+        description: "No file selected",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -46,7 +51,6 @@ const FileShareDialog = ({ file, open, onClose }: FileShareDialogProps) => {
         .insert({
           file_id: file.id,
           token: token,
-          created_by: user.id,
           expires_at: expiresAt,
           download_limit: hasDownloadLimit ? downloadLimit : null,
         });

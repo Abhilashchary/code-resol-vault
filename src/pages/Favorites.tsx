@@ -64,7 +64,13 @@ const Favorites = () => {
     let cancelled = false;
 
     const run = async () => {
-      if (!username) return;
+      if (!username) {
+        setGuestUserId(null);
+        setFiles([]);
+        setFavorites(new Set());
+        setLoading(false);
+        return;
+      }
 
       setLoading(true);
       const id = await ensureGuestUserId();

@@ -309,7 +309,10 @@ const Dashboard = () => {
   };
 
   const handleToggleFavorite = async (fileId: string) => {
-    if (!guestUserId) {
+    // If the user clicks before guestUserId is resolved, resolve it on-demand.
+    const resolvedUserId = guestUserId ?? (await ensureGuestUserId());
+
+    if (!resolvedUserId) {
       toast({
         title: "Favorites",
         description: "Please re-enter to enable favorites",
@@ -318,13 +321,15 @@ const Dashboard = () => {
       return;
     }
 
+    if (!guestUserId) setGuestUserId(resolvedUserId);
+
     try {
       if (favorites.has(fileId)) {
         const { error } = await supabase
           .from("favorites")
           .delete()
           .eq("file_id", fileId)
-          .eq("user_id", guestUserId);
+          .eq("user_id", resolvedUserId);
 
         if (error) throw error;
 
@@ -333,16 +338,19 @@ const Dashboard = () => {
           next.delete(fileId);
           return next;
         });
-      } else {
-        const { error } = await supabase.from("favorites").insert({
-          file_id: fileId,
-          user_id: guestUserId,
-        });
-
-        if (error) throw error;
-
-        setFavorites((prev) => new Set(prev).add(fileId));
+        return;
       }
+
+      const { error } = await supabase
+        .from("favorites")
+        .upsert(
+          { file_id: fileId, user_id: resolvedUserId },
+          { onConflict: "user_id,file_id" }
+        );
+
+      if (error) throw error;
+
+      setFavorites((prev) => new Set(prev).add(fileId));
     } catch (error: any) {
       toast({
         title: "Favorites error",

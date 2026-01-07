@@ -194,13 +194,23 @@ const Favorites = () => {
   const handleToggleFavorite = async (fileId: string) => {
     if (!guestUserId) return;
 
-    await supabase
-      .from("favorites")
-      .delete()
-      .eq("file_id", fileId)
-      .eq("user_id", guestUserId);
+    try {
+      const { error } = await supabase
+        .from("favorites")
+        .delete()
+        .eq("file_id", fileId)
+        .eq("user_id", guestUserId);
 
-    loadData(guestUserId);
+      if (error) throw error;
+
+      await loadData(guestUserId);
+    } catch (error: any) {
+      toast({
+        title: "Favorites error",
+        description: error.message || "Failed to update favorites",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleShare = (file: any) => {

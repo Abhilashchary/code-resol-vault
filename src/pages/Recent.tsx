@@ -4,7 +4,7 @@ import { useGuestAuth } from "@/hooks/useGuestAuth";
 import Layout from "@/components/Layout";
 import FolderGrid from "@/components/FolderGrid";
 import FilePreviewDialog from "@/components/FilePreviewDialog";
-import FileShareDialog from "@/components/FileShareDialog";
+
 import { useToast } from "@/hooks/use-toast";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
@@ -23,7 +23,6 @@ const Recent = () => {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [previewFile, setPreviewFile] = useState<any>(null);
-  const [shareFile, setShareFile] = useState<any>(null);
   const [guestUserId, setGuestUserId] = useState<string | null>(null);
 
   const ensureGuestUserId = async (): Promise<string | null> => {
@@ -240,7 +239,14 @@ const Recent = () => {
     }
   };
 
-  const handleShare = (file: any) => setShareFile(file);
+  const handleShare = (file: any) => {
+    const { data } = supabase.storage.from("files").getPublicUrl(file.storage_path);
+    navigator.clipboard.writeText(data.publicUrl).then(() => {
+      toast({ title: "Link copied!", description: "Public link copied to clipboard" });
+    }).catch(() => {
+      toast({ title: "Share link", description: data.publicUrl });
+    });
+  };
 
   return (
     <Layout>
@@ -281,7 +287,7 @@ const Recent = () => {
         onDownload={() => previewFile && handleDownload(previewFile)}
       />
 
-      <FileShareDialog file={shareFile} open={!!shareFile} onClose={() => setShareFile(null)} />
+      
     </Layout>
   );
 };

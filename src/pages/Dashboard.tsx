@@ -8,7 +8,7 @@ import FolderGrid from "@/components/FolderGrid";
 import FileUpload from "@/components/FileUpload";
 import BulkFileUpload from "@/components/BulkFileUpload";
 import FilePreviewDialog from "@/components/FilePreviewDialog";
-import FileShareDialog from "@/components/FileShareDialog";
+
 import BulkOperationsBar from "@/components/BulkOperationsBar";
 import RenameDialog from "@/components/RenameDialog";
 import FolderTreePicker from "@/components/FolderTreePicker";
@@ -61,7 +61,6 @@ const Dashboard = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState("name");
   const [previewFile, setPreviewFile] = useState<any>(null);
-  const [shareFile, setShareFile] = useState<any>(null);
   const [guestUserId, setGuestUserId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -366,6 +365,15 @@ const Dashboard = () => {
     loadData();
   };
 
+  const handleShare = (file: any) => {
+    const { data } = supabase.storage.from("files").getPublicUrl(file.storage_path);
+    navigator.clipboard.writeText(data.publicUrl).then(() => {
+      toast({ title: "Link copied!", description: "Public link copied to clipboard" });
+    }).catch(() => {
+      toast({ title: "Share link", description: data.publicUrl });
+    });
+  };
+
   const handleRename = async (newName: string) => {
     if (!renameDialog) return;
     const table = renameDialog.type === "file" ? "files" : "folders";
@@ -530,7 +538,7 @@ const Dashboard = () => {
             onDelete={handleDelete}
             onToggleFavorite={handleToggleFavorite}
             onMoveFile={handleMoveFile}
-            onShare={setShareFile}
+            onShare={handleShare}
             onRename={(type, id, name) => setRenameDialog({ open: true, type, id, currentName: name })}
             onCopy={handleCopy}
             onCut={handleCut}
@@ -554,7 +562,7 @@ const Dashboard = () => {
         <ClipboardIndicator onPaste={handlePaste} />
 
         {previewFile && <FilePreviewDialog file={previewFile} open={!!previewFile} onClose={() => setPreviewFile(null)} onDownload={() => handleDownload(previewFile)} />}
-        {shareFile && <FileShareDialog file={shareFile} open={!!shareFile} onClose={() => setShareFile(null)} />}
+        
         {renameDialog && <RenameDialog open={renameDialog.open} onOpenChange={(open) => !open && setRenameDialog(null)} currentName={renameDialog.currentName} itemType={renameDialog.type} onRename={handleRename} />}
         {moveFolderDialog && <FolderTreePicker open={moveFolderDialog.open} onOpenChange={(open) => !open && setMoveFolderDialog(null)} onSelect={handleMoveFolder} excludeFolderId={moveFolderDialog.folderId} />}
         

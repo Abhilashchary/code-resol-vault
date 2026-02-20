@@ -66,7 +66,7 @@ export type Database = {
             foreignKeyName: "favorites_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "guest_users"
             referencedColumns: ["id"]
           },
         ]

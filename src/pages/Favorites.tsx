@@ -89,6 +89,7 @@ const Favorites = () => {
   }, [username]);
 
   const loadData = async (userId: string | null) => {
+    setLoading(true);
     try {
       if (!userId) {
         setFiles([]);
@@ -194,6 +195,14 @@ const Favorites = () => {
   const handleToggleFavorite = async (fileId: string) => {
     if (!guestUserId) return;
 
+    // Optimistically remove from UI immediately
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.delete(fileId);
+      return next;
+    });
+
     try {
       const { error } = await supabase
         .from("favorites")
@@ -202,9 +211,9 @@ const Favorites = () => {
         .eq("user_id", guestUserId);
 
       if (error) throw error;
-
-      await loadData(guestUserId);
     } catch (error: any) {
+      // Rollback on failure
+      await loadData(guestUserId);
       toast({
         title: "Favorites error",
         description: error.message || "Failed to update favorites",

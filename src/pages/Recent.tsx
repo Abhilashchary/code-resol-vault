@@ -73,6 +73,7 @@ const Recent = () => {
         return;
       }
 
+      setLoading(true);
       const id = await ensureGuestUserId();
       if (cancelled) return;
 
